@@ -1,0 +1,28 @@
+{
+  "name": "fint",
+  "version": "1.0.0",
+  "description": "Typescript Lib with Common functionality that many projects will need",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://zg2svr01.ema.lilly.com:4443/scm/git/node/ts-core"
+  },
+  "keywords": [
+    "Typescript",
+    "Library",
+    "Fint"
+  ],
+  "author": "Geordi Filiotis",
+  "license": "AGPL",
+  "devDependencies": {
+    "typescript": "latest",
+    "mocha": "latest",
+    "@types/mocha": "latest",
+    "chai": "latest",
+    "@types/chai": "latest"
+  }
+}
