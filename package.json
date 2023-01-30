@@ -1,0 +1,33 @@
+{
+  "name": "fint",
+  "version": "0.1.0",
+  "description": "Strongly typed tools for typescript",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "npx tsc",
+    "test": "npx tsc && npx mocha dist/tests/test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Geordi7/fint.git"
+  },
+  "keywords": [
+    "Typescript",
+    "Library",
+    "Fint"
+  ],
+  "author": "Geordi Filiotis",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Geordi7/fint/issues"
+  },
+  "homepage": "https://github.com/Geordi7/fint#readme",
+  "devDependencies": {
+    "@types/chai": "latest",
+    "@types/mocha": "latest",
+    "chai": "latest",
+    "mocha": "10.2.0",
+    "typescript": "^4"
+  }
+}
