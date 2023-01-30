@@ -1,4 +1,6 @@
 
-export * as proxy from './proxy';
-export * as gen from './generators';
-export * from './functional';
+export * from './misc';
+export * from './pipes';
+export * from './proxy';
+export * from './transforms';
+export * from './types';

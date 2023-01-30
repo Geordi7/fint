@@ -1,25 +1,51 @@
 
-// proxy a function over an object
-// the function must take a string as an argument:
-//      const prepend = proxy.map((s1: string) => (...s2: string) => s1 + s2));
-//      prepend.abc('xyz') --> 'abcxyz'
-//
-// optional first argument is a host which overrides the function
-//      const prepend = proxy.map({abc: 'foo'}, (s1: string) => (...s2: string) => s1 + s2));
-//      prepend.abc --> 'foo'
+export const readProxy = <U>(proxy: (s: string) => U) => new Proxy({},
+    Object.assign(neverProxyHandler<{[K in string]: U}>('readProxy'), {
+        get(target: {[K in string]: U}, p: string) {
+            target[p] = target[p] ?? proxy(p);
+            return target[p];
+        },
+    })
+);
 
-export const map:
-    & (<K extends PropertyKey,T>(fn: (k: K) => T) => {[k in K]: T})
-    & (<K extends PropertyKey,T,H>(host: H, fn: (k: K) => T) => H & {[k in K]: T})
-= (<K extends PropertyKey,T>(a1: any | ((k: K) => T), a2?: (k: K) => T): {[k in K]: T} => {
-    const fn = (a2 === undefined) ? a1 : a2;
-    const host = (a2 === undefined) ? {} : a1;
-
-    return new Proxy(host, {
-        get(target: any, key: K) {
-            if (!(key in target))
-                target[key] = fn(key);
-            return target[key];
-        }
-    });
-}) as any;
+const neverProxyHandler = <U extends object>(label: string): ProxyHandler<U> => ({
+    set() {
+        throw new Error(`Cannot set properties on a ${label}`);
+    },
+    deleteProperty() {
+        throw new Error(`Cannot delete properties values on a ${label}`);
+    },
+    apply() {
+        throw new Error(`Cannot apply a ${label}`);
+    },
+    construct() {
+        throw new Error(`Cannot construct a ${label}`);
+    },
+    defineProperty() {
+        throw new Error(`Cannot define properties on a ${label}`);
+    },
+    get() {
+        throw new Error(`Cannot get properties of a ${label}`);
+    },
+    getOwnPropertyDescriptor() {
+        throw new Error(`Cannot get property descriptors of a ${label}`);
+    },
+    getPrototypeOf() {
+        throw new Error(`Cannot get prototype of a ${label}`);
+    },
+    has() {
+        throw new Error(`Cannot check for a property on a ${label}`);
+    },
+    isExtensible() {
+        return false;
+    },
+    ownKeys() {
+        throw new Error(`Cannot query for own keys of as ${label}`);
+    },
+    preventExtensions() {
+        return false;
+    },
+    setPrototypeOf() {
+        throw new Error(`Cannot set prototype of a ${label}`);
+    }
+})

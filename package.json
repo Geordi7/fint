@@ -1,15 +1,16 @@
 {
   "name": "fint",
-  "version": "1.0.0",
-  "description": "Typescript Lib with Common functionality that many projects will need",
+  "version": "0.1.0",
+  "description": "Strongly typed tools for typescript",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npx tsc",
+    "test": "npx tsc && npx mocha dist/tests/test.js"
   },
   "repository": {
     "type": "git",
-    "url": "https://zg2svr01.ema.lilly.com:4443/scm/git/node/ts-core"
+    "url": "git+https://github.com/Geordi7/fint.git"
   },
   "keywords": [
     "Typescript",
@@ -17,12 +18,16 @@
     "Fint"
   ],
   "author": "Geordi Filiotis",
-  "license": "AGPL",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Geordi7/fint/issues"
+  },
+  "homepage": "https://github.com/Geordi7/fint#readme",
   "devDependencies": {
-    "typescript": "latest",
-    "mocha": "latest",
+    "@types/chai": "latest",
     "@types/mocha": "latest",
     "chai": "latest",
-    "@types/chai": "latest"
+    "mocha": "10.2.0",
+    "typescript": "^4"
   }
 }

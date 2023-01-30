@@ -1,90 +1,91 @@
-# ts-fint
+# fint
 
-A Typescript library with common functionality that many projects will need.
+A library of strongly typed tools for typescript
 
-## Tour
+```bash
+npm install -s '@Geordi7/fint';
+```
 
-generators: Tools for interacting with and combining generators
+# Property Proxies
 
-    iter(iterable)
-        get an iterator over the iterable
-    next(iterator or generator, failure value?)
-        get the next item from the iterator or generator
-        if it is exhausted return undefined,
-        if a failure value is given, return that instead
-    collect(iterator or generator)
-        return an array with all the remaining values in the iterator or generator
-    count*()
-        generate numbers starting at 0
-    index*(n: number)
-        generate numbers starting at 0 up to n
-    repeat(x)
-        generate x over and over again
-    range(n)
-        just like index(n)
-    range(a,b)
-        generate a, then step towards b in increments of size 1
-    range(a,b,s)
-        generate a, then step towards b in increments of size s
-    zip(...generators)
-        transpose the arguments generating tuples of the items in them
-        [a1,b1,c1] then [a2,b2,c2] and so on...
-    seq(...generators)
-        generate all the items in the first generator,
-        then the second, then the third, and so on...
+Create proxies for functions over the properties of a virtual object.
 
-functional: Tools for interacting with collections... whether they are records or arrays (note that we prefer the use of Record<K,T>)
+```typescript
+import {readProxy} from '@Geordi7/fint';
 
-    map.a(array, fn)
-        like array.map
-    map.ag(array, fn)
-        like Array.map(), but provides a generator for the results
-        fn is called each time a value is consumed
-    map.ar(array, fn)
-        fn: (value, index, array) => [key, result] | null
-        map an array to a record using a function that produces key-value pairs
-        if the function returns null the entry is ignored
-    
-    map.r(record, fn)
-        fn: (value, key, record) => result
-        map a record to another record with same keys
-    map.rr(record, fn)
-        fn: (value, key, record) => [newKey, result] | null
-        map a record to a record with different keys
-        if the function returns null the entry is ignored
-    map.ra(record,fn)
-        fn: (value, key, record) => result
-        map a record to an array
-    map.rg(record,fn)
-        fn: (value, key, record) => result
-        map a record to a generator, the function is called each time a value is consumed
-    
-    map.g(gen, fn)
-        fn: (value) => result
-        map a generator into another generator
-    map.gg(gen, fn)
-        fn: (value) => result | null
-        map a generator into another generator
-        if the function returns null the item is skipped
-    map.ga(gen, fn)
-        fn: (value) => result
-        map a generator to an array
-    map.gr(gen, fn)
-        fn: (value) => [key, result] | null
-        map a generator to a record
-        if the function returns null the item is skipped
+const prefixy = readProxy((s1: string) => (s2: string) => s1 + s2);
+const postfixy = readProxy((s1: string) => (s2: string) => s2 + s1);
 
-    magic(thing, fn)
-        fn: (value, key, thing) => result
-        maps a structure to the same shape with results in place of values
+const example1 = prefixy.abc('xyz')     // 'abcxyz'
+const example2 = postfixy.abc('xyz')    // 'xyzabc'
+const example3 = prefixy.hello(postfixy.world(' ')) // 'hello world'
+```
 
-    zip(...iterables)
-        produces an array of arrays such that the nth array has the nth item of every argument
+or an example with html tags
 
-    transpose(matrix, rank)
-        matrix is a 2D matrix in a 1D array
-        this function transposes it with respect to rank
+```typescript
+const tag = readProxy((tagname: string) => (props: Record<string, string>, ...content: string[]): string =>
+    content.length ?
+        `<${tagname} ${formatprops(props)}>${content.join('\n')}</${tagname}>` :
+        `<${tagname} />`);
 
-proxy: Tools to hide extra behavior in seemingly innocent objects
+const formatprops = (props: Record<string,string>) =>
+    rec.e(props).map(([k,v]) => `${k}=${v}`).join(' ');
 
-tag: Tools for generating HTML in a programmatic fashion
+const {html, head, body, title, div, p} = tag;
+
+const doc = html({},
+    head({}, title({}, 'A clever example of using a readProxy to create html tag functions')),
+    body({},
+        div({},
+            p({}, 'paragraph 1'),
+            p({}, 'paragraph 2')
+        )
+    )
+);
+```
+
+# Data Transformation tools
+
+easily create data transform pipelines for sync (`pipe`/`into`) or async (`bridge`/`over`) code.
+
+point-free wrappers for common HOFs in:
+* `arr` for arrays
+* `rec` for records
+* `iter` for iterators
+* `maybe` for unions with null or undefined
+
+and some helpers in
+* `str` for strings
+* `set` for sets
+* `obj` for general objects
+
+```typescript
+import {rec, arr, into} from '@Geordi7/fint';
+
+data = [1,2,3,4,5];
+labels = ['a', 'b', 'c', 'd', 'e'];
+
+const x = into([labels, data],      // [string[], number[]]
+    arr.zip,                        // [string, number][]
+    rec.from,                       // Record<string, number>
+    rec.map(n => n > 2),            // Record<string, boolean>
+    rec.entries,                    // [string, boolean][]
+    arr.order(([k]) => k)           // [string, boolean][] (sorted on the strings)
+);
+```
+
+```typescript
+import {over, asyn} from '@Geordi7/fint';
+
+async function delay<T>(miliseconds: number,v: T): Promise<T> {
+    await new Promise(r => setTimeout(r, miliseconds));
+    return v;
+}
+
+(async () => {
+    await over([1,2,3,4,5],
+        n => delay(1000, n)),
+
+})()
+```

@@ -1,16 +1,25 @@
+import { raise } from "./misc";
 
-// a thing that is a generator or iterator
-export type GeneratorOrIterator<T> =
-    | Generator<T, void, undefined>
-    | Iterator<T, void, undefined>
-    | IterableIterator<T>
-;
+export type MaybePromise<T> = T | Promise<T>;
 
-// Zip/Transpose related types
-export type Zippable = (unknown[] | GeneratorOrIterator<unknown>)[]
-export type ZipType<Q extends Zippable> = {
-    [k in keyof Q]:
-        Q[k] extends unknown[] ? Q[k][number] :
-        Q[k] extends Generator<infer T, any, any> ? T :
-        never
+export type PrettyIntersection<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
+
+// nominal types
+declare const brand: unique symbol;
+export type Nominal<T, Label extends string> = T & {readonly [brand]: Label};
+
+export type integer = Nominal<number, 'integer' | 'unsigned'>;
+export const integer = {
+    parse: (u: unknown): integer => {
+        return Number.isInteger(u) ? u as integer :
+            raise(`${u} is not an integer`);
+    }
+}
+
+export type unsigned = Nominal<number, 'unsigned'>;
+export const unsigned = {
+    parse: (u: unknown): unsigned => {
+        return  Number.isInteger(u) && (u as integer) >= 0 ? u as unsigned :
+        raise(`${u} is not an integer`);
+    }
 }
