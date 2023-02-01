@@ -5,15 +5,20 @@
       "module": "commonjs",
       "moduleResolution": "node",
       "outDir": "dist",
+      "declaration": true,
+      "sourceMap": true,
+      
       "strict": true,
+      "strictBindCallApply": true,
+      "strictPropertyInitialization": true,
+      "strictNullChecks": true,
+      "strictFunctionTypes": true,
+
       "noImplicitAny": true,
       "noFallthroughCasesInSwitch": true,
       "noUnusedParameters": true,
-      "declaration": true,
-      "sourceMap": true,
-      "strictPropertyInitialization": true,
-      "strictNullChecks": true,
-      "strictFunctionTypes": true
+      "noImplicitThis": true,
+      "noUnusedLocals": true
   },
   "include": ["src/**/*"],
 }
