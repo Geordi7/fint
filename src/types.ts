@@ -1,8 +1,11 @@
 import { raise } from "./misc";
 
+export type PrettyIntersection<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
+
 export type MaybePromise<T> = T | Promise<T>;
 
-export type PrettyIntersection<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
+export const isPromise = <T>(thing: MaybePromise<T>): thing is Promise<T> =>
+    ('then' in (thing as object) && typeof (thing as {then: unknown}).then === "function");
 
 // nominal types
 declare const brand: unique symbol;

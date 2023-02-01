@@ -1,11 +1,11 @@
 {
-  "name": "fint",
-  "version": "0.1.0",
+  "name": "@geordi7/fint",
+  "version": "0.1.1",
   "description": "Strongly typed tools for typescript",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "npx tsc",
+    "build": "rm -rf dist && npx tsc",
     "test": "npx tsc && npx mocha dist/tests/test.js"
   },
   "repository": {

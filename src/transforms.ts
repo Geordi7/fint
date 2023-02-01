@@ -1,6 +1,6 @@
 
 import { assert } from './misc';
-import {flow, into} from './pipes';
+import {flow} from './pipes';
 
 export const identity = <T>(t: T): T => t;
 
