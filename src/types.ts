@@ -7,6 +7,8 @@ export type MaybePromise<T> = T | Promise<T>;
 export const isPromise = <T>(thing: MaybePromise<T>): thing is Promise<T> =>
     ('then' in (thing as object) && typeof (thing as {then: unknown}).then === "function");
 
+export const isNullish = (t: unknown): t is null | undefined => (t == null);
+
 // nominal types
 declare const brand: unique symbol;
 export type Nominal<T, Label extends string> = T & {readonly [brand]: Label};
