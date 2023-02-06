@@ -1,4 +1,5 @@
 
+export * from './config-merge';
 export * from './misc';
 export * from './pipes';
 export * from './proxy';

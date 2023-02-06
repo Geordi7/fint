@@ -1,14 +1,17 @@
 
 import { assert } from './misc';
 import {flow} from './pipes';
+import { is } from './types';
 
 export const identity = <T>(t: T): T => t;
+
+export const inspect = <V>(fn: (v: V) => unknown) => <U extends V>(v: U): U => (fn(v), v);
 
 export const rec = ({
     k: Object.keys as <K extends PropertyKey>(record: Record<K,unknown>) => K[],
     v: Object.values as <V>(r: Record<PropertyKey, V>) => V[],
     e: Object.entries as <K extends PropertyKey, V>(r: Record<K, V>) => [K, V][],
-    f: Object.fromEntries as <K extends PropertyKey, V>(a: [K, V][]) => Record<K,V>,
+    f: Object.fromEntries as <K extends PropertyKey, V>(a: Iterable<[K, V]>) => Record<K,V>,
 
     // point-free tools
 
@@ -16,9 +19,11 @@ export const rec = ({
         (record: Record<K,V>): Record<K,U> =>
             rec.e(record).reduce((l, [k,v]) => (l[k] = fn(v,k), l), {} as Record<K,U>),
 
-    filter: <V, K extends PropertyKey>(fn: (v: V, k: K) => boolean) =>
+    filter: (<V, K extends PropertyKey>(fn: (v: V, k: K) => boolean) =>
         (record: Record<K,V>): Record<K,V> =>
-            rec.e(record).reduce((l, [k,v]) => (fn(v,k) ? l[k] = v : null, l), {} as Record<K,V>),
+            rec.e(record).reduce((l, [k,v]) => (fn(v,k) ? l[k] = v : null, l), {} as Record<K,V>)) as
+        & (<V, U extends V, K extends PropertyKey>(fn: (v: V, k: K) => v is U) => (record: Record<K,V>) => Record<K,U>)
+        & (<V, K extends PropertyKey>(fn: (v: V, k: K) => boolean) => (record: Record<K,V>) => Record<K,V>),
 
     reduce: <V, U, K extends PropertyKey>(u: U, fn: (u: U, v: V, k: K) => U) =>
         (record: Record<K, V>): U => rec.e(record).reduce((u, [k,v]) => fn(u,v,k), u),
@@ -40,13 +45,20 @@ export const rec = ({
         }
         return false;
     },
+
+    // take a set of keys and a function and create a record with them
+    fromKeys: <K extends PropertyKey,V>(fn: (k: K) => V) => (keys: Iterable<K>): Record<K,V> =>
+        rec.f(flow(keys,
+            iter.map(k => [k, fn(k)] as [K,V]),
+            iter.filter(([_,v]) => !is.undefined(v)))),
 });
 
 export const arr = {
     map: <V,U>(fn: (v: V, i: number) => U) =>
         (array: V[]): U[] => array.map(fn),
-    filter: <V>(fn: (v: V, i: number) => boolean) =>
-        (array: V[]): V[] => array.filter(fn),
+    filter: ((fn: (v: any, i: number) => unknown) => (a: any[]) => a.filter(fn)) as
+        & (<V,U extends V>(fn: (v: V, i: number) => v is U) => (array: V[]) => U[])
+        & (<V>(fn: (v: V, i: number) => boolean) => (array: V[]) => V[]),
     reduce: <V,U>(u: U, fn: (u: U, v: V, i: number) => U) =>
         (array: V[]): U => array.reduce(fn, u),
     inspect: <V>(fn: (v: V, i: number) => void) =>
@@ -163,9 +175,21 @@ export const str = {
 
 export const iter = {
     ate: <V>(i: Iterable<V>): Iterator<V> => i[Symbol.iterator](),
-    map:<V,U>(fn: (v: V) => U) => function*(i: IterableIterator<V>): IterableIterator<U> {
-        for(const item of i) yield fn(item);
+    map:<V,U>(fn: (v: V) => U) => function*(i: Iterable<V>): IterableIterator<U> {
+        for (const item of i) yield fn(item);
     },
+    filter: (<V>(fn: (v: V) => boolean) => function*<U extends V>(i: Iterable<U>): IterableIterator<U> {
+        for (const item of i)
+            if (fn(item))
+                yield item;
+    }) as
+        & (<V>(fn: (v: V) => boolean) => <U extends V>(i: Iterable<U>) => IterableIterator<U>)
+        & (<V,U extends V>(fn: (v: V) => v is U) => (i: Iterable<V>) => IterableIterator<U>),
+    reduce: (<V,U>(u: U, fn: (u: U, v: V) => U) => (i: Iterable<V>): U => {
+        for (const item of i)
+            u = fn(u,item);
+        return u;
+    }),
     zip: function*<Q extends Iterable<unknown>[]>(...iters: Q): IterableIterator<IterZipType<Q>> {
         const ptrs = iters.map(i => iter.ate(i));
         while(true) {
@@ -189,17 +213,10 @@ export const iter = {
     },
     step: <T>(step: (t: T) => void) => (g: IterableIterator<T>): boolean =>
         flow(g.next(), n => n.done ? false : (step(n.value), true)),
-    collect: <T>(i: IterableIterator<T>): T[] => {
-        const r = [] as T[];
-        while(true) {
-            const n = i.next();
-            if (n.done)
-                return r;
-            else
-                r.push(n.value);
-        }
+    collect: <T>(i: Iterable<T>): T[] => {
+        return [...i] as T[];
     },
-    enumerate: function*<T>(i: IterableIterator<T>): IterableIterator<[number,T]> {
+    enumerate: function*<T>(i: Iterable<T>): IterableIterator<[number,T]> {
         yield * iter.zip(iter.count(), i);
     },
     count: function*(): Generator<number, never, void> {
@@ -257,7 +274,7 @@ export const iter = {
         while(true) yield t;
     },
 
-    aperture: <V>(n: number) => function*(i: IterableIterator<V>): Generator<V[], void, void> {
+    aperture: <V>(n: number) => function*(i: Iterable<V>): Generator<V[], void, void> {
         const ap = [] as V[];
         for(const item of i) {
             ap.push(item);
@@ -284,17 +301,19 @@ export const maybe = {
         thing == undefined ? orElse() : map(thing),
     mapOr: <V,U>(map: (v: V) => U, or: U) => (thing: V | undefined | null) : U =>
         thing == undefined ? or : map(thing),
-    or: <V,U>(u: U) => (thing: V | undefined | null) : V | U =>
+    or: <U>(u: U) => <V>(thing: V | undefined | null) : V | U =>
         thing ?? u,
-    orElse: <V,U>(fn: () => U) => (thing: V | undefined | null) : V | U =>
+    orElse: <U>(fn: () => U) => <V>(thing: V | undefined | null) : V | U =>
         thing ?? fn(),
 }
 
 export const set = {
-    union: <T>(...sets: Set<T>[]): Set<T> => {
+    union: <T>(...sets: Iterable<T>[]): Set<T> => {
         return new Set(iter.chain(...sets));
     },
-    intersect: <T>(...sets: Set<T>[]): Set<T> => {
+    intersect: <T>(...collections: Iterable<T>[]): Set<T> => {
+        const sets = collections.map(c =>
+            c instanceof Set ? c : new Set(c));
         const [head, ...tail] = sets;
 
         const result = new Set(head);
