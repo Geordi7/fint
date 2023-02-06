@@ -17,7 +17,7 @@
 //      r.isErr() -- to check if its Err
 //      r.err() -- to get the err value or throw an exception
 
-import { isPromise } from "./types";
+import { is, MaybePromise } from "./types";
 
 export type Result<R,E> = Ok<R> | Err<E>;
 export type PResult<R,E> = Promise<Result<R,E>>;
@@ -31,10 +31,10 @@ export function Err<E>(error: E): Result<never, E> {return new ResultErr(error);
 export const Result = {
     // wrap a function that can raise an exception
     // create a function which captures success in Ok and exceptions in Err
-    lift: (<V extends unknown[], R>(fn: (...v: V) => R) => (...v: V): Result<R,Error> | PResult<R,Error> => {
+    lift: (<V extends unknown[], R>(fn: (...v: V) => R) => (...v: V): MaybePromise<Result<R,Error>> => {
         try {
             const r = fn(...v);
-            if (isPromise(r)) {
+            if (is.promise(r)) {
                 return r.then(v => Ok(v))
                     .catch(e => e instanceof Error ? Err(e) :
                         Err(new Error('unexpected error type', {cause: e})));
