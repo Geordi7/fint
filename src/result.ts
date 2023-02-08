@@ -19,7 +19,7 @@
 
 import { is, MaybePromise } from "./types";
 
-export type Result<R,E> = Ok<R> | Err<E>;
+export type Result<R,E> = (Ok<R> | Err<E>) & IResult<R,E>;
 export type PResult<R,E> = Promise<Result<R,E>>;
 export type Ok<R> = ResultOk<R>;
 export type Err<R> = ResultErr<R>;
@@ -29,9 +29,12 @@ export function Err<E>(error: E): Result<never, E> {return new ResultErr(error);
 
 // result tools
 export const Result = {
+    Ok,
+    Err,
+
     // wrap a function that can raise an exception
     // create a function which captures success in Ok and exceptions in Err
-    lift: (<V extends unknown[], R>(fn: (...v: V) => R) => (...v: V): MaybePromise<Result<R,Error>> => {
+    lift: (<V extends unknown[], R>(fn: (...v: V) => MaybePromise<R>) => (...v: V): MaybePromise<Result<R,Error>> => {
         try {
             const r = fn(...v);
             if (is.promise(r)) {
@@ -59,49 +62,64 @@ export const Result = {
     map: <R1,R2>(fn: (q: R1) => R2) => <E>(r: Result<R1,E>): Result<R2,E> => r.map(fn),
     bind: <R1,R2,E1>(fn: (a: R1) => Result<R2,E1>) => <E2>(r: Result<R1,E2>): Result<R2, E1 | E2> => r.bind(fn),
     mapError: <E1,E2>(fn: (e: E1) => E2) => <R>(r: Result<R,E1>): Result<R,E2> => r.mapError(fn),
+    mapElse: <R1,R2,E1,E2>(rfn: (r: R1) => R2, efn: (e: E1) => E2) => (r: Result<R1,E1>): Result<R2,E2> => r.mapElse(rfn, efn),
+    out: <R1,E1,O>(rfn: (r: R1) => O, efn: (e: E1) => O) => (r: Result<R1,E1>): O => r.out(rfn, efn),
     ok: <R>(r: Result<R,unknown>) => r.ok(),
     isOk: <R>(r: Result<R,unknown>): r is ResultOk<R> => r.isOk(),
     err: <E>(r: Result<unknown,E>) => r.err(),
     isErr: <E>(r: Result<unknown,E>): r is ResultErr<E> => r.isErr(),
-    toString: <R>(r: Result<R,unknown>) => r.ok(),
-};
+} satisfies 
+    & {
+        Ok: unknown,
+        Err: unknown,
+        lift: unknown,
+        capture: unknown
+    }
+    & {[K in keyof IResult<unknown, unknown>]: unknown}
+;
 
-export class ResultOk<R> implements IResult<R,never> {
-    r: R;
-    constructor(r: R) {this.r = r;}
-    map<Q>(fn: (q: R) => Q): Result<Q,never> {
+export class ResultOk<R0> implements IResult<R0,never> {
+    r: R0;
+    constructor(r: R0) {this.r = r;}
+    map<R1>(fn: (r: R0) => R1): Result<R1,never> {
         return Ok(fn(this.r));
     }
-    bind<Q,E>(fn: (a: R) => Result<Q,E>): Result<Q, E> {
+    bind<R1,E1>(fn: (r: R0) => Result<R1,E1>): Result<R1, E1> {
         return fn(this.r);
     }
-    mapError(): Result<R,never> {
-        return this as unknown as Result<R, never>;
+    mapError(): Result<R0,never> {
+        return this as unknown as Result<R0, never>;
     }
-    mapElse<Q,EE>(rfn: (r: R) => Q, _: (e: never) => EE) {
+    mapElse<R1,E1>(rfn: (r: R0) => R1, _: (e: never) => E1) {
         return Ok(rfn(this.r));
     }
-    ok(): R {return this.r;}
+    out<O>(rfn: (r: R0) => O, _: (e: never) => O) {
+        return rfn(this.r);
+    }
+    ok(): R0 {return this.r;}
     isOk(): true {return true;}
     err(): never {throw new Error(`Result is Ok but Err expected`);}
     isErr(): false {return false;}
     toString(): string {return `Ok(${String(this.r)})`;}
 }
 
-export class ResultErr<E> implements IResult<never,E> {
-    e: E;
-    constructor(e: E) {this.e = e;}
-    map<Q>(): Result<Q,E> {
-        return this as unknown as Result<Q,E>;
+export class ResultErr<E0> implements IResult<never,E0> {
+    e: E0;
+    constructor(e: E0) {this.e = e;}
+    map<R1>(): Result<R1,E0> {
+        return this as unknown as Result<R1,E0>;
     }
-    bind<Q,EE>(): Result<Q, E | EE> {
-        return this as unknown as Result<Q,E>;
+    bind<R1,E1>(): Result<R1, E0 | E1> {
+        return this as unknown as Result<R1,E0>;
     }
-    mapError<EE>(fn: (e: E) => EE): Result<never,EE> {
+    mapError<E1>(fn: (e: E0) => E1): Result<never,E1> {
         return Err(fn(this.e));
     }
-    mapElse<Q,EE>(_: (u: never) => Q, efn: (e: E) => EE) {
+    mapElse<R1,E1>(_: (r: never) => R1, efn: (e: E0) => E1) {
         return Err(efn(this.e));
+    }
+    out<O>(_: (n: never) => O, efn: (e: E0) => O) {
+        return efn(this.e);
     }
     ok(): never {
         if (this.e instanceof Error)
@@ -110,19 +128,20 @@ export class ResultErr<E> implements IResult<never,E> {
             throw new Error(String(this.e));
     }
     isOk(): false {return false;}
-    err(): E {return this.e;}
+    err(): E0 {return this.e;}
     isErr(): true {return true;}
     toString(): string {return `Err(${String(this.e)})`;}
 }
 
-export interface IResult<R,E> {
-    map<Q>(fn: (a: R) => Q): IResult<Q,E>,
-    bind<Q,EE>(fn: (a: R) => IResult<Q,EE>): IResult<Q, E | EE>,
-    mapError<EE>(fn: (e: E) => EE): IResult<R,EE>,
-    mapElse<Q,EE>(rfn: (a: R) => Q, efn: (e: E) => EE): IResult<Q,EE>,
-    ok(): R,
-    isOk(): this is ResultOk<R>,
-    err(): E,
-    isErr(): this is ResultErr<E>,
+export interface IResult<R0,E0> {
+    map<R1>(fn: (r: R0) => R1): Result<R1,E0>,
+    bind<R1,E1>(fn: (r: R0) => Result<R1,E1>): Result<R1, E0 | E1>,
+    mapError<E1>(fn: (e: E0) => E1): Result<R0,E1>,
+    mapElse<R1,E1>(rfn: (r: R0) => R1, efn: (e: E0) => E1): Result<R1,E1>,
+    out<O>(rfn: (r: R0) => O, efn: (e: E0) => O): O,
+    ok(): R0,
+    isOk(): this is ResultOk<R0>,
+    err(): E0,
+    isErr(): this is ResultErr<E0>,
     toString(): string,
 }
