@@ -1,7 +1,7 @@
 
 import { assert } from './misc';
 import {flow} from './pipes';
-import { is } from './types';
+import { is, Maybe } from './types';
 
 export const identity = <T>(t: T): T => t;
 
@@ -311,15 +311,15 @@ export type IterZipType<Q extends Iterable<unknown>[]> = {
 export type DeepIter<T> = Iterable<T | DeepIter<T>>;
 
 export const maybe = {
-    map: <V,U>(fn: (v: V) => U) => (thing: V | undefined | null): U | undefined =>
+    map: <V,U>(fn: (v: V) => U) => (thing: Maybe<V>): U | undefined =>
         thing == undefined ? undefined : fn(thing),
-    mapElse: <V,U>(map: (v: V) => U, orElse: () => U) => (thing: V | undefined | null) : U =>
+    mapElse: <V,U>(map: (v: V) => U, orElse: () => U) => (thing: Maybe<V>) : U =>
         thing == undefined ? orElse() : map(thing),
-    mapOr: <V,U>(map: (v: V) => U, or: U) => (thing: V | undefined | null) : U =>
+    mapOr: <V,U>(map: (v: V) => U, or: U) => (thing: Maybe<V>) : U =>
         thing == undefined ? or : map(thing),
-    or: <U>(u: U) => <V>(thing: V | undefined | null) : V | U =>
+    or: <U>(u: U) => <V>(thing: Maybe<V>) : V | U =>
         thing ?? u,
-    orElse: <U>(fn: () => U) => <V>(thing: V | undefined | null) : V | U =>
+    orElse: <U>(fn: () => U) => <V>(thing: Maybe<V>) : V | U =>
         thing ?? fn(),
 }
 

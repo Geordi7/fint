@@ -15,6 +15,8 @@ export type PlainOldData =
 
 export type PrettyIntersection<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
 
+export type Maybe<T> = T | null | undefined;
+
 export type MaybePromise<T> = T | Promise<T>;
 
 export const is = {
