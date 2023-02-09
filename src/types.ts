@@ -24,7 +24,7 @@ export const is = {
     string: (thing: unknown): thing is string => (typeof thing) === 'string',
     number: (thing: unknown): thing is number => (typeof thing) === 'number',
     object: (thing: unknown): thing is object => (typeof thing) === 'object',
-    function: (thing: unknown): thing is ((...a: any[]) => unknown) => (typeof thing) === 'function',
+    function: (thing: unknown): thing is Function => (typeof thing) === 'function',
 
     nullish: (t: unknown): t is null | undefined => (t == null),
     
