@@ -284,6 +284,22 @@ export const iter = {
             }
         }
     },
+
+    include: <V>(keep: Iterable<V>) => function*(i: Iterable<V>): IterableIterator<V> {
+        const d = keep instanceof Set ? keep : new Set(keep);
+        for (const item of i) {
+            if (d.has(item))
+                yield item;
+        }
+    },
+
+    exclude: <V>(discard: Iterable<V>) => function*(i: Iterable<V>): IterableIterator<V> {
+        const d = discard instanceof Set ? discard : new Set(discard);
+        for (const item of i) {
+            if (!d.has(item))
+                yield item;
+        }
+    },
 };
 
 export type IterZipType<Q extends Iterable<unknown>[]> = {
@@ -327,6 +343,15 @@ export const set = {
         }
         return result;
     },
+    difference: <T>(source: Iterable<T>, discard: Iterable<T>): Set<T> => {
+        const setDiscard = discard instanceof Set ? discard : new Set(discard);
+        const result = new Set<T>();
+        for (const item of source) {
+            if (!setDiscard.has(item))
+                result.add(item);
+        }
+        return result;
+    }
 }
 
 export const obj = {
