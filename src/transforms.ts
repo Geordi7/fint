@@ -113,7 +113,7 @@ export const arr = {
                     maybe.mapOr(x => (x.push(v), x), [v])),
             })),
         {} as Record<K, V[]>),
-    product: function*<T extends unknown[][]>(...axes: T): Generator<ProductResultItem<T>,void,void> {
+    product: function*<T extends unknown[][]>(...axes: T): IterableIterator<ProductResultItem<T>> {
         if (axes.length === 0)
             return;
     
@@ -219,10 +219,10 @@ export const iter = {
     enumerate: function*<T>(i: Iterable<T>): IterableIterator<[number,T]> {
         yield * iter.zip(iter.count(), i);
     },
-    count: function*(): Generator<number, never, void> {
+    count: function*(): IterableIterator<number> {
         let i=0; while(true) yield i++;
     },
-    index: function*(n: number): Generator<number, void, void> {
+    index: function*(n: number): IterableIterator<number> {
         let i = 0; while (i<n) yield i++;
     },
     deep: function*<T>(src: DeepIter<T>): IterableIterator<T> {
@@ -250,7 +250,7 @@ export const iter = {
     // (start, end, step) => start to end by steps
     //
     // if step is specified and has the wrong sign, no values are produced
-    range: (function*(startend: number, end?: number, step?: number): Generator<number, void, void> {
+    range: (function*(startend: number, end?: number, step?: number): IterableIterator<number> {
         let start = startend;
         if (end === undefined) {
             start = 0;
@@ -266,15 +266,15 @@ export const iter = {
             i += step;
         }
     }) as
-    & ((end: number) => Generator<number, void, void>)
-    & ((start: number, end: number) => Generator<number, void, void>)
-    & ((start: number, end: number, step: number) => Generator<number, void, void>),
+    & ((end: number) => IterableIterator<number>)
+    & ((start: number, end: number) => IterableIterator<number>)
+    & ((start: number, end: number, step: number) => IterableIterator<number>),
 
-    repeat: function*<T>(t: T): Generator<T, never, void> {
+    repeat: function*<T>(t: T): IterableIterator<T> {
         while(true) yield t;
     },
 
-    aperture: <V>(n: number) => function*(i: Iterable<V>): Generator<V[], void, void> {
+    aperture: <V>(n: number) => function*(i: Iterable<V>): IterableIterator<V[]> {
         const ap = [] as V[];
         for(const item of i) {
             ap.push(item);
