@@ -332,6 +332,6 @@ export const set = {
 export const obj = {
     pick: <T, K extends keyof T>(...k: K[]) => (t: T): Pick<T,K> =>
         k.reduce((p, kk) => (p[kk] = t[kk], p), {} as Pick<T,K>),
-    exclude: <T, K extends keyof T>(...k: K[]) => (t: T): Exclude<T,K> =>
-        k.reduce((p, kk) => {delete p[kk]; return p}, {...t} as Exclude<T,K>),
+    omit: <T, K extends keyof T>(...k: K[]) => (t: T): Omit<T,K> =>
+        k.reduce((p, kk) => {delete (p as T)[kk]; return p}, {...t} as Omit<T,K>),
 }
