@@ -1,7 +1,7 @@
 
 import { assert } from './misc';
 import {flow} from './pipes';
-import { is, Maybe } from './types';
+import { is, Maybe, Tree } from './types';
 
 export const identity = <T>(t: T): T => t;
 
@@ -86,12 +86,11 @@ export const arr = {
     squash: <V>(array: DeepArray<V>): V[] =>
         [...iter.deep(array as DeepIter<V>)],
     partition: <V,U>(fn: (v: V, i: number) => U) => (array: V[]): Map<U,V[]> =>
-        array.reduce((m,v,i) =>
-            flow(fn(v,i), x => flow(m.get(x),
-                    maybe.mapElse(
-                        t => (t.push(v), m),
-                        () => m.set(x,[v])))),
-            new Map<U,V[]>()),
+        array.reduce((m,v,i) => {
+            const key = fn(v,i);
+            m.set(key, [...m.get(key) ?? [], v]);
+            return m;
+        }, new Map<U,V[]>()),
     divide: <V>(n: number) => (array: V[]): [V[], V[]] =>
         [array.slice(0,n), array.slice(n)],
     chunk: <V>(n: number) => (array: V[]): V[][] => {
@@ -106,13 +105,10 @@ export const arr = {
         return result;
     },
     lookup: <V, K extends PropertyKey>(fn: (v: V, i: number) => K) => (array: V[]): Record<K, V[]> =>
-        array.reduce((l,v,i) => flow(fn(v,i),
-            k => ({
-                ...l,
-                [k]: flow(l[k],
-                    maybe.mapOr(x => (x.push(v), x), [v])),
-            })),
-        {} as Record<K, V[]>),
+        array.reduce((l,v,i) => {
+            const key = fn(v,i);
+            return {...l, [key]: [...(l[key] ?? []), v]};
+        }, {} as Record<K, V[]>),
     product: function*<T extends unknown[][]>(...axes: T): IterableIterator<ProductResultItem<T>> {
         if (axes.length === 0)
             return;
@@ -311,11 +307,11 @@ export type IterZipType<Q extends Iterable<unknown>[]> = {
 export type DeepIter<T> = Iterable<T | DeepIter<T>>;
 
 export const maybe = {
-    map: <V,U>(fn: (v: V) => U) => (thing: Maybe<V>): U | undefined =>
+    map: <V,U>(fn: (v: V) => U) => <T extends V>(thing: Maybe<T>): U | undefined =>
         thing == undefined ? undefined : fn(thing),
-    mapElse: <V,U>(map: (v: V) => U, orElse: () => U) => (thing: Maybe<V>) : U =>
+    mapElse: <V,U>(map: (v: V) => U, orElse: () => U) => <T extends V>(thing: Maybe<T>): U =>
         thing == undefined ? orElse() : map(thing),
-    mapOr: <V,U>(map: (v: V) => U, or: U) => (thing: Maybe<V>) : U =>
+    mapOr: <V,U>(map: (v: V) => U, or: U) => (thing: V | null | undefined): U =>
         thing == undefined ? or : map(thing),
     or: <U>(u: U) => <V>(thing: Maybe<V>) : V | U =>
         thing ?? u,
@@ -355,8 +351,55 @@ export const set = {
 }
 
 export const obj = {
-    pick: <T, K extends keyof T>(...k: K[]) => (t: T): Pick<T,K> =>
+    pick: <K extends PropertyKey>(...k: K[]) => <T extends {[k in K]: unknown}>(t: T): Pick<T,K> =>
         k.reduce((p, kk) => (p[kk] = t[kk], p), {} as Pick<T,K>),
-    omit: <T, K extends keyof T>(...k: K[]) => (t: T): Omit<T,K> =>
+    omit: <K extends PropertyKey>(...k: K[]) => <T extends {[k in K]: unknown}>(t: T): Omit<T,K> =>
         k.reduce((p, kk) => {delete (p as T)[kk]; return p}, {...t} as Omit<T,K>),
+}
+
+export const tree = {
+    clone: <V>(t: Tree<V>): Tree<V> => {
+        if (is.array(t))
+            return t.map(tree.clone) as V;
+        else if (is.record(t))
+            return rec.map(tree.clone)(t) as V;
+        else
+            return t;
+    },
+
+    map: <V,U>(fn: (v: V) => U) => {
+        const mfn = (t: Tree<V>): Tree<U> => {
+            if (is.array(t))
+                return t.map(mfn);
+            else if (is.record(t))
+                return rec.map(mfn)(t);
+            else
+                return fn(t);
+        }
+
+        return (t: Tree<V>): Tree<U> => mfn(t);
+    },
+
+    // tree.prune(predicate)(tree)
+    // recursively apply fn to everything in tree
+    // remove values that produce false
+    // if a subtree is empty after pruning then remove the subtree
+    prune: <V>(predicate: (v: V) => boolean) => {
+        const keep = (item: Tree<V | undefined>) =>
+            is.array(item) ? item.length > 0 :
+            is.record(item) ? rec.k(item).length > 0 :
+            !is.undefined(item);
+
+        const pfn = (t: Tree<V>): Tree<V | undefined> => {
+            if (is.array(t)) {
+                return t.map(pfn).filter(keep);
+            } else if (is.record(t)) {
+                return flow(t, rec.map(pfn), rec.filter(keep));
+            } else {
+                return predicate(t) ? t : undefined;
+            }
+        }
+
+        return (tree: Tree<V>) => pfn(tree) as Tree<V> | undefined;
+    }
 }

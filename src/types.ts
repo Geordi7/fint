@@ -1,17 +1,5 @@
-import { raise } from "./misc";
-import { rec } from "./transforms";
-
-export type PlainOldData =
-    | null
-    | string
-    | number
-    | boolean
-    | integer
-    | unsigned
-    | bigint
-    | PlainOldData[]
-    | {[K in string]: PlainOldData}
-;
+import { flow } from "./pipes";
+import { tree } from "./transforms";
 
 export type PrettyIntersection<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
 
@@ -27,8 +15,11 @@ export const is = {
     number: (thing: unknown): thing is number => (typeof thing) === 'number',
     object: (thing: unknown): thing is object => (typeof thing) === 'object',
     function: (thing: unknown): thing is Function => (typeof thing) === 'function',
+    bigint: (thing: unknown): thing is bigint => (typeof thing) === 'bigint',
 
     nullish: (t: unknown): t is null | undefined => (t == null),
+
+    real: (t: unknown): t is number => is.number(t) && !Number.isNaN(t),
     
     array: <T>(thing: unknown | T[]): thing is T[] => Array.isArray(thing),
 
@@ -37,33 +28,22 @@ export const is = {
 
     promise: <T>(thing: MaybePromise<T>): thing is Promise<T> =>
         ('then' in (thing as object) && is.function((thing as {then: unknown}).then)),
+
+    set: (thing: unknown): thing is Set<unknown> => (thing instanceof Set),
+    map: (thing: unknown): thing is Map<unknown, unknown> => (thing instanceof Map),
+    date: (thing: unknown): thing is Date => (thing instanceof Date && is.real(thing.valueOf())),
 }
 
 // nominal types
 declare const brand: unique symbol;
 export type Nominal<T, Label extends string> = T & {readonly [brand]: Label};
 
-export type integer = Nominal<number, 'integer' | 'unsigned'>;
-export const integer = {
-    parse: (u: unknown): integer => {
-        return Number.isInteger(u) ? u as integer :
-            raise(`${u} is not an integer`);
-    }
-}
+export type Tree<T> = T | Tree<T>[] | {[K in string]: Tree<T>};
+export type PlainOldData = Tree<null | string | number | boolean | bigint | Date>
+export type JSONSerializable = Tree<null | string | number | boolean>
 
-export type unsigned = Nominal<number, 'unsigned'>;
-export const unsigned = {
-    parse: (u: unknown): unsigned => {
-        return  Number.isInteger(u) && (u as integer) >= 0 ? u as unsigned :
-        raise(`${u} is not an integer`);
-    }
-}
-
-export const clone = <V extends PlainOldData>(v: V): V => {
-    if (is.array(v))
-        return v.map(clone) as V;
-    else if (is.record(v))
-        return rec.map(clone)(v) as V;
-    else
-        return v;
-}
+export const makeJSONSerializable = (pod: PlainOldData): JSONSerializable => flow(pod,
+    tree.map(item =>
+        is.bigint(item) ? item?.toString() + 'n' :
+        is.date(item) ? item.toISOString() :
+        item))

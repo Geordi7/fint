@@ -89,3 +89,8 @@ async function delay<T>(miliseconds: number,v: T): Promise<T> {
 
 })()
 ```
+
+
+# Other
+
+[a study on numerics](https://gist.github.com/Geordi7/6348f95c11a0461b5cbf0823c719259c)

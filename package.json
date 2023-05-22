@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Geordi7/fint.git"
+    "url": "git+https://github.com/Geordi7/fint.git" 
   },
   "keywords": [
     "Typescript",

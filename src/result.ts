@@ -19,7 +19,7 @@
 
 import { is, MaybePromise } from "./types";
 
-export type Result<R,E> = (Ok<R> | Err<E>) & IResult<R,E>;
+export type Result<R,E> = IResult<R,E>;
 export type PResult<R,E> = Promise<Result<R,E>>;
 export type Ok<R> = ResultOk<R>;
 export type Err<R> = ResultErr<R>;
@@ -64,16 +64,33 @@ export const Result = {
     mapError: <E1,E2>(fn: (e: E1) => E2) => <R>(r: Result<R,E1>): Result<R,E2> => r.mapError(fn),
     mapElse: <R1,R2,E1,E2>(rfn: (r: R1) => R2, efn: (e: E1) => E2) => (r: Result<R1,E1>): Result<R2,E2> => r.mapElse(rfn, efn),
     out: <R1,E1,O>(rfn: (r: R1) => O, efn: (e: E1) => O) => (r: Result<R1,E1>): O => r.out(rfn, efn),
+    okOr: <R1>(ev: R1) => <E1>(r: Result<R1,E1>): R1 => r.okOr(ev),
+    okElse: <R1,E1>(efn: (e: E1) => R1) => (r: Result<R1,E1>): R1 => r.okElse(efn),
     ok: <R>(r: Result<R,unknown>) => r.ok(),
     isOk: <R>(r: Result<R,unknown>): r is ResultOk<R> => r.isOk(),
     err: <E>(r: Result<unknown,E>) => r.err(),
     isErr: <E>(r: Result<unknown,E>): r is ResultErr<E> => r.isErr(),
+
+    // other tools
+    collect: <R,E>(i: Iterable<Result<R,E>>): {ok: R[], err: E[]} => {
+        const r = {ok: [] as R[], err: [] as E[]};
+
+        for (const item of i) {
+            item.isOk() ?
+                r.ok.push(item.ok()) :
+                r.err.push(item.err());
+        }
+
+        return r;
+    }
+
 } satisfies 
     & {
         Ok: unknown,
         Err: unknown,
         lift: unknown,
         capture: unknown
+        collect: unknown
     }
     & {[K in keyof IResult<unknown, unknown>]: unknown}
 ;
@@ -95,6 +112,12 @@ export class ResultOk<R0> implements IResult<R0,never> {
     }
     out<O>(rfn: (r: R0) => O, _: (e: never) => O) {
         return rfn(this.r);
+    }
+    okOr(_: R0): R0 {
+        return this.r;
+    }
+    okElse(_: (e: never) => R0): R0 {
+        return this.r;
     }
     ok(): R0 {return this.r;}
     isOk(): true {return true;}
@@ -121,6 +144,12 @@ export class ResultErr<E0> implements IResult<never,E0> {
     out<O>(_: (n: never) => O, efn: (e: E0) => O) {
         return efn(this.e);
     }
+    okOr(ev: never): never {
+        return ev;
+    }
+    okElse(efn: (e: E0) => never): never {
+        return efn(this.e);
+    }
     ok(): never {
         if (this.e instanceof Error)
             throw this.e;
@@ -139,6 +168,8 @@ export interface IResult<R0,E0> {
     mapError<E1>(fn: (e: E0) => E1): Result<R0,E1>,
     mapElse<R1,E1>(rfn: (r: R0) => R1, efn: (e: E0) => E1): Result<R1,E1>,
     out<O>(rfn: (r: R0) => O, efn: (e: E0) => O): O,
+    okOr(ev: R0): R0,
+    okElse(efn: (e:E0) => R0): R0,
     ok(): R0,
     isOk(): this is ResultOk<R0>,
     err(): E0,

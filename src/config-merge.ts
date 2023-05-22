@@ -1,8 +1,8 @@
 
-import { rec, set } from "./transforms";
+import { tree, rec, set } from "./transforms";
 import { raise } from "./misc";
 import { flow } from "./pipes";
-import { clone, is, PlainOldData } from "./types";
+import { is, PlainOldData } from "./types";
 
 // merge semantics:
 // deep copy 
@@ -14,7 +14,7 @@ export const configMerge = (previous: PlainOldData, next: PlainOldData): PlainOl
 
 const configMergeRecursive = (previous: PlainOldData, next: PlainOldData, path: string): PlainOldData => {
     return is.array(previous) ? is.array(next) ?
-            [...clone(previous), ...clone(next)] :
+            [...tree.clone(previous) as PlainOldData[], ...tree.clone(next) as PlainOldData[]] :
             raise(`${path}: cannot merge non-array into array`) :
         is.record(previous) ? is.record(next) ?
             flow(set.union(rec.k(previous), rec.k(next)),
@@ -23,6 +23,6 @@ const configMergeRecursive = (previous: PlainOldData, next: PlainOldData, path: 
         // previous is scalar
         is.nullish(next) ?
             previous :
-            clone(next)
+            tree.clone(next)
     ;
 };
