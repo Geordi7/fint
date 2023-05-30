@@ -1,6 +1,6 @@
 {
   "name": "@geordi7/fint",
-  "version": "0.1.3",
+  "version": "0.1.6",
   "description": "Strongly typed tools for typescript",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Geordi7/fint.git"
+    "url": "git+https://github.com/Geordi7/fint.git" 
   },
   "keywords": [
     "Typescript",
@@ -28,6 +28,6 @@
     "@types/mocha": "latest",
     "chai": "latest",
     "mocha": "10.2.0",
-    "typescript": "^4"
+    "typescript": "^5"
   }
 }

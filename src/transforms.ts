@@ -1,7 +1,7 @@
 
 import { assert } from './misc';
 import {flow} from './pipes';
-import { is } from './types';
+import { is, KeysAcrossUnion, Maybe, PrettyIntersection, PropsAcrossUnion, Tree } from './types';
 
 export const identity = <T>(t: T): T => t;
 
@@ -86,12 +86,11 @@ export const arr = {
     squash: <V>(array: DeepArray<V>): V[] =>
         [...iter.deep(array as DeepIter<V>)],
     partition: <V,U>(fn: (v: V, i: number) => U) => (array: V[]): Map<U,V[]> =>
-        array.reduce((m,v,i) =>
-            flow(fn(v,i), x => flow(m.get(x),
-                    maybe.mapElse(
-                        t => (t.push(v), m),
-                        () => m.set(x,[v])))),
-            new Map<U,V[]>()),
+        array.reduce((m,v,i) => {
+            const key = fn(v,i);
+            m.set(key, [...m.get(key) ?? [], v]);
+            return m;
+        }, new Map<U,V[]>()),
     divide: <V>(n: number) => (array: V[]): [V[], V[]] =>
         [array.slice(0,n), array.slice(n)],
     chunk: <V>(n: number) => (array: V[]): V[][] => {
@@ -106,14 +105,11 @@ export const arr = {
         return result;
     },
     lookup: <V, K extends PropertyKey>(fn: (v: V, i: number) => K) => (array: V[]): Record<K, V[]> =>
-        array.reduce((l,v,i) => flow(fn(v,i),
-            k => ({
-                ...l,
-                [k]: flow(l[k],
-                    maybe.mapOr(x => (x.push(v), x), [v])),
-            })),
-        {} as Record<K, V[]>),
-    product: function*<T extends unknown[][]>(...axes: T): Generator<ProductResultItem<T>,void,void> {
+        array.reduce((l,v,i) => {
+            const key = fn(v,i);
+            return {...l, [key]: [...(l[key] ?? []), v]};
+        }, {} as Record<K, V[]>),
+    product: function*<T extends unknown[][]>(...axes: T): IterableIterator<ProductResultItem<T>> {
         if (axes.length === 0)
             return;
     
@@ -219,10 +215,10 @@ export const iter = {
     enumerate: function*<T>(i: Iterable<T>): IterableIterator<[number,T]> {
         yield * iter.zip(iter.count(), i);
     },
-    count: function*(): Generator<number, never, void> {
+    count: function*(): IterableIterator<number> {
         let i=0; while(true) yield i++;
     },
-    index: function*(n: number): Generator<number, void, void> {
+    index: function*(n: number): IterableIterator<number> {
         let i = 0; while (i<n) yield i++;
     },
     deep: function*<T>(src: DeepIter<T>): IterableIterator<T> {
@@ -250,7 +246,7 @@ export const iter = {
     // (start, end, step) => start to end by steps
     //
     // if step is specified and has the wrong sign, no values are produced
-    range: (function*(startend: number, end?: number, step?: number): Generator<number, void, void> {
+    range: (function*(startend: number, end?: number, step?: number): IterableIterator<number> {
         let start = startend;
         if (end === undefined) {
             start = 0;
@@ -266,15 +262,15 @@ export const iter = {
             i += step;
         }
     }) as
-    & ((end: number) => Generator<number, void, void>)
-    & ((start: number, end: number) => Generator<number, void, void>)
-    & ((start: number, end: number, step: number) => Generator<number, void, void>),
+    & ((end: number) => IterableIterator<number>)
+    & ((start: number, end: number) => IterableIterator<number>)
+    & ((start: number, end: number, step: number) => IterableIterator<number>),
 
-    repeat: function*<T>(t: T): Generator<T, never, void> {
+    repeat: function*<T>(t: T): IterableIterator<T> {
         while(true) yield t;
     },
 
-    aperture: <V>(n: number) => function*(i: Iterable<V>): Generator<V[], void, void> {
+    aperture: <V>(n: number) => function*(i: Iterable<V>): IterableIterator<V[]> {
         const ap = [] as V[];
         for(const item of i) {
             ap.push(item);
@@ -282,6 +278,22 @@ export const iter = {
                 ap.shift();
                 yield [...ap];
             }
+        }
+    },
+
+    include: <V>(keep: Iterable<V>) => function*(i: Iterable<V>): IterableIterator<V> {
+        const d = keep instanceof Set ? keep : new Set(keep);
+        for (const item of i) {
+            if (d.has(item))
+                yield item;
+        }
+    },
+
+    exclude: <V>(discard: Iterable<V>) => function*(i: Iterable<V>): IterableIterator<V> {
+        const d = discard instanceof Set ? discard : new Set(discard);
+        for (const item of i) {
+            if (!d.has(item))
+                yield item;
         }
     },
 };
@@ -295,15 +307,15 @@ export type IterZipType<Q extends Iterable<unknown>[]> = {
 export type DeepIter<T> = Iterable<T | DeepIter<T>>;
 
 export const maybe = {
-    map: <V,U>(fn: (v: V) => U) => (thing: V | undefined | null): U | undefined =>
+    map: <V,U>(fn: (v: V) => U) => <T extends V>(thing: Maybe<T>): U | undefined =>
         thing == undefined ? undefined : fn(thing),
-    mapElse: <V,U>(map: (v: V) => U, orElse: () => U) => (thing: V | undefined | null) : U =>
+    mapElse: <V,U>(map: (v: V) => U, orElse: () => U) => <T extends V>(thing: Maybe<T>): U =>
         thing == undefined ? orElse() : map(thing),
-    mapOr: <V,U>(map: (v: V) => U, or: U) => (thing: V | undefined | null) : U =>
+    mapOr: <V,U>(map: (v: V) => U, or: U) => (thing: V | null | undefined): U =>
         thing == undefined ? or : map(thing),
-    or: <U>(u: U) => <V>(thing: V | undefined | null) : V | U =>
+    or: <U>(u: U) => <V>(thing: Maybe<V>) : V | U =>
         thing ?? u,
-    orElse: <U>(fn: () => U) => <V>(thing: V | undefined | null) : V | U =>
+    orElse: <U>(fn: () => U) => <V>(thing: Maybe<V>) : V | U =>
         thing ?? fn(),
 }
 
@@ -327,11 +339,123 @@ export const set = {
         }
         return result;
     },
+    difference: <T>(source: Iterable<T>, discard: Iterable<T>): Set<T> => {
+        const setDiscard = discard instanceof Set ? discard : new Set(discard);
+        const result = new Set<T>();
+        for (const item of source) {
+            if (!setDiscard.has(item))
+                result.add(item);
+        }
+        return result;
+    }
 }
 
 export const obj = {
-    pick: <T, K extends keyof T>(...k: K[]) => (t: T): Pick<T,K> =>
+    pick: <K extends PropertyKey>(...k: K[]) => <T extends {[k in K]: unknown}>(t: T): Pick<T,K> =>
         k.reduce((p, kk) => (p[kk] = t[kk], p), {} as Pick<T,K>),
-    exclude: <T, K extends keyof T>(...k: K[]) => (t: T): Exclude<T,K> =>
-        k.reduce((p, kk) => {delete p[kk]; return p}, {...t} as Exclude<T,K>),
+    omit: <K extends PropertyKey>(...k: K[]) => <T extends {[k in K]: unknown}>(t: T): Omit<T,K> =>
+        k.reduce((p, kk) => {delete (p as T)[kk]; return p}, {...t} as Omit<T,K>),
+}
+
+// point free tools for discriminated unions
+export const union = {
+    dispatch: <
+        const X extends string,
+        Q extends {[K in X]: string},
+        const M extends DispatchOver<X,Q>>
+    (discriminant: X, dispatcher: M) =>
+    (item: Q): ReturnsFromProps<M> => dispatch(discriminant, item, dispatcher),
+
+    match: <
+        Q extends {[X in string]: unknown},
+        const D extends MatchOver<Q>>
+    (matcher: D) =>
+    (item: Q): ReturnsFromProps<D> => match(item, matcher),
+};
+
+export function match<Q extends {[X in string]: unknown}, const D extends MatchOver<Q>>
+(item: Q, matcher: D): ReturnsFromProps<D> {
+    const keys = Object.keys(matcher) as (keyof D)[];
+    
+    for (const k of keys) {
+        if (k in item) {
+            return (matcher[k] as any)(item);
+        }
+    }
+
+    throw new Error(`could not match variant with keys [${Object.keys(item).join(',')}] with matcher with keys [${Object.keys(matcher).join(',')}]`);
+};
+
+export type MatchOver<Q> = {[K in KeysAcrossUnion<Q>]?: (variant: MatchVariantFor<Q,K>) => unknown};
+
+export type MatchVariantFor<T,K extends string> = T extends {[XK in (infer KK extends K)]: unknown} ?
+    PrettyIntersection<T & {[KKK in KK]: T[KK]}> : never;
+
+export type ReturnsFromProps<T> = PropsAcrossUnion<T> extends (arg: never) => infer R ? R : never;
+
+export function dispatch<
+    const X extends string,
+    Q extends {[K in X]: string},
+    const M extends DispatchOver<X,Q>>
+(discriminant: X, item: Q, dispatcher: M): ReturnsFromProps<M> {
+    const x = item[discriminant];
+
+    if (x in dispatcher) {
+        return (dispatcher[x] as any)(item);
+    }
+
+    throw new Error(`failed to dispatch discriminant ${x} with dispatcher with keys [${Object.keys(dispatcher).join(',')}]`);
+};
+
+export type DispatchOver<X extends string, Q extends {[K in X]: string}> = {
+    [K in Q[X]]?: (variant: DispatchVariantFor<X,Q,K>) => unknown
+};
+
+export type DispatchVariantFor<X extends string, Q, K> = PrettyIntersection<{[XX in X]: K} & Q>
+
+export const tree = {
+    clone: <V>(t: Tree<V>): Tree<V> => {
+        if (is.array(t))
+            return t.map(tree.clone);
+        else if (is.record(t))
+            return rec.map(tree.clone)(t);
+        else
+            return t;
+    },
+
+    map: <V,U>(fn: (v: V) => U) => {
+        const mfn = (t: Tree<V>): Tree<U> => {
+            if (is.array(t))
+                return t.map(mfn);
+            else if (is.record(t))
+                return rec.map(mfn)(t);
+            else
+                return fn(t);
+        }
+
+        return (t: Tree<V>): Tree<U> => mfn(t);
+    },
+
+    // tree.prune(predicate)(tree)
+    // recursively apply fn to everything in tree
+    // remove values that produce false
+    // if a subtree is empty after pruning then remove the subtree
+    prune: <V>(predicate: (v: V) => boolean) => {
+        const keep = (item: Tree<V | undefined>) =>
+            is.array(item) ? item.length > 0 :
+            is.record(item) ? rec.k(item).length > 0 :
+            !is.undefined(item);
+
+        const pfn = (t: Tree<V>): Tree<V | undefined> => {
+            if (is.array(t)) {
+                return t.map(pfn).filter(keep);
+            } else if (is.record(t)) {
+                return flow(t, rec.map(pfn), rec.filter(keep));
+            } else {
+                return predicate(t) ? t : undefined;
+            }
+        }
+
+        return (tree: Tree<V>) => pfn(tree) as Tree<V> | undefined;
+    }
 }
