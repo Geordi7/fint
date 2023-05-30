@@ -47,3 +47,8 @@ export const makeJSONSerializable = (pod: PlainOldData): JSONSerializable => flo
         is.bigint(item) ? item?.toString() + 'n' :
         is.date(item) ? item.toISOString() :
         item))
+;
+
+export type KeysAcrossUnion<T> = T extends infer TT ? string & keyof TT : never;
+
+export type PropsAcrossUnion<T> = T extends infer TT ? TT[keyof TT] : never;

@@ -1,7 +1,7 @@
 
 import { assert } from './misc';
 import {flow} from './pipes';
-import { is, Maybe, Tree } from './types';
+import { is, KeysAcrossUnion, Maybe, PrettyIntersection, PropsAcrossUnion, Tree } from './types';
 
 export const identity = <T>(t: T): T => t;
 
@@ -356,6 +356,62 @@ export const obj = {
     omit: <K extends PropertyKey>(...k: K[]) => <T extends {[k in K]: unknown}>(t: T): Omit<T,K> =>
         k.reduce((p, kk) => {delete (p as T)[kk]; return p}, {...t} as Omit<T,K>),
 }
+
+// point free tools for discriminated unions
+export const union = {
+    dispatch: <
+        const X extends string,
+        Q extends {[K in X]: string},
+        const M extends DispatchOver<X,Q>>
+    (discriminant: X, dispatcher: M) =>
+    (item: Q): ReturnsFromProps<M> => dispatch(discriminant, item, dispatcher),
+
+    match: <
+        Q extends {[X in string]: unknown},
+        const D extends MatchOver<Q>>
+    (matcher: D) =>
+    (item: Q): ReturnsFromProps<D> => match(item, matcher),
+};
+
+export function match<Q extends {[X in string]: unknown}, const D extends MatchOver<Q>>
+(item: Q, matcher: D): ReturnsFromProps<D> {
+    const keys = Object.keys(matcher) as (keyof D)[];
+    
+    for (const k of keys) {
+        if (k in item) {
+            return (matcher[k] as any)(item);
+        }
+    }
+
+    throw new Error(`could not match variant with keys [${Object.keys(item).join(',')}] with matcher with keys [${Object.keys(matcher).join(',')}]`);
+};
+
+export type MatchOver<Q> = {[K in KeysAcrossUnion<Q>]?: (variant: MatchVariantFor<Q,K>) => unknown};
+
+export type MatchVariantFor<T,K extends string> = T extends {[XK in (infer KK extends K)]: unknown} ?
+    PrettyIntersection<T & {[KKK in KK]: T[KK]}> : never;
+
+export type ReturnsFromProps<T> = PropsAcrossUnion<T> extends (arg: never) => infer R ? R : never;
+
+export function dispatch<
+    const X extends string,
+    Q extends {[K in X]: string},
+    const M extends DispatchOver<X,Q>>
+(discriminant: X, item: Q, dispatcher: M): ReturnsFromProps<M> {
+    const x = item[discriminant];
+
+    if (x in dispatcher) {
+        return (dispatcher[x] as any)(item);
+    }
+
+    throw new Error(`failed to dispatch discriminant ${x} with dispatcher with keys [${Object.keys(dispatcher).join(',')}]`);
+};
+
+export type DispatchOver<X extends string, Q extends {[K in X]: string}> = {
+    [K in Q[X]]?: (variant: DispatchVariantFor<X,Q,K>) => unknown
+};
+
+export type DispatchVariantFor<X extends string, Q, K> = PrettyIntersection<{[XX in X]: K} & Q>
 
 export const tree = {
     clone: <V>(t: Tree<V>): Tree<V> => {

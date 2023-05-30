@@ -4,12 +4,42 @@ import {expect} from 'chai';
 
 import {
     arr,
+    dispatch,
     iter,
+    match,
     tree,
 } from '../transforms';
 
 export function test() {
     describe('transforms', () => {
+        describe('union', () => {
+            describe('dispatch', () => {
+                it('calls the right function for the variant', () => {
+                    const variant = {a: 'x', b: 1} as const;
+                    expect(dispatch('a', variant, {x: v => v.b}))
+                        .equals(1);
+                    });
+                it('complains if the variant is unknown', () => {
+                    const variant = {a: 'x', b: 1} as const;
+                    expect(() => dispatch('a', variant, {}))
+                        .throws('failed to dispatch discriminant x with dispatcher with keys []');
+                });
+            });
+
+            describe('match', () => {
+                it('calls the right function for the variant', () => {
+                    const variant = {a: 1};
+                    expect(match(variant, {a: v => v.a}))
+                        .equals(1);
+                });
+                it('complains if the variant is unknown', () => {
+                    const variant = {a: 1};
+                    expect(() => match(variant, {}))
+                        .throws('could not match variant with keys [a] with matcher with keys []')
+                })
+            });
+        });
+
         describe('iter', () => {
             describe('iter.repeat', () => {
                 it('produces the same value repeatedly', () => {
