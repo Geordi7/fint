@@ -360,9 +360,9 @@ export const obj = {
 export const tree = {
     clone: <V>(t: Tree<V>): Tree<V> => {
         if (is.array(t))
-            return t.map(tree.clone) as V;
+            return t.map(tree.clone);
         else if (is.record(t))
-            return rec.map(tree.clone)(t) as V;
+            return rec.map(tree.clone)(t);
         else
             return t;
     },
