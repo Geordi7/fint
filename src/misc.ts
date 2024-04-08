@@ -1,5 +1,6 @@
 
 export const id = <T>(i: T) => i;
+export const identity = id;
 
 export function raise(msg: string): never {
     throw new Error(msg);
