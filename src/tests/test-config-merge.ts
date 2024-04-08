@@ -31,6 +31,22 @@ export function test() {
                 const c = configMerge(a,b);
 
                 expect(c).deep.equals({a: {aa: {aaa: 1, aab: 2, aac: 2}, ab: [1,2,3,4]}})
+            });
+
+            it('fills in missing objects', () => {
+                const a = {a: {aa: 1}};
+                const b = {b: {bb: 2}};
+                const c = configMerge(a,b);
+
+                expect(c).deep.equals({a: {aa: 1}, b: {bb: 2}});
+            });
+
+            it('prefers values to nulls', () => {
+                const a = {a: 1};
+                const b = {a: null};
+                const c = configMerge(a,b);
+
+                expect(c).deep.equals({a: 1});
             })
         });
     });
