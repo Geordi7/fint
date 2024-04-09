@@ -26,18 +26,18 @@ or an example with html tags
 ```typescript
 const tag = readProxy((tagname: string) => (props: Record<string, string>, ...content: string[]): string =>
     content.length ?
-        `<${tagname} ${formatprops(props)}>${content.join('\n')}</${tagname}>` :
+        `<${tagname} ${formatProps(props)}>${content.join('\n')}</${tagname}>` :
         `<${tagname} />`);
 
-const formatprops = (props: Record<string,string>) =>
-    rec.e(props).map(([k,v]) => `${k}=${v}`).join(' ');
+const formatProps = (props: Record<string,string>) =>
+    rec.e(props).map(([k,v]) => ` ${k}="${v}"`).join('');
 
 const {html, head, body, title, div, p} = tag;
 
 const doc = html({},
     head({}, title({}, 'A clever example of using a readProxy to create html tag functions')),
     body({},
-        div({},
+        div({class: 'centered-x centered-y'},
             p({}, 'paragraph 1'),
             p({}, 'paragraph 2')
         )
@@ -61,12 +61,12 @@ and some helpers in
 * `obj` for general objects
 
 ```typescript
-import {rec, arr, into} from '@Geordi7/fint';
+import {rec, arr, flow} from '@Geordi7/fint';
 
 data = [1,2,3,4,5];
 labels = ['a', 'b', 'c', 'd', 'e'];
 
-const x = into([labels, data],      // [string[], number[]]
+const x = flow([labels, data],      // [string[], number[]]
     arr.zip,                        // [string, number][]
     rec.from,                       // Record<string, number>
     rec.map(n => n > 2),            // Record<string, boolean>
@@ -76,7 +76,7 @@ const x = into([labels, data],      // [string[], number[]]
 ```
 
 ```typescript
-import {over, asyn} from '@Geordi7/fint';
+import {over} from '@Geordi7/fint';
 
 async function delay<T>(miliseconds: number,v: T): Promise<T> {
     await new Promise(r => setTimeout(r, miliseconds));

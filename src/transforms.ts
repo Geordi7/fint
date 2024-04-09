@@ -1,45 +1,43 @@
 
-import { assert } from './misc';
-import {flow} from './pipes';
-import { is, KeysAcrossUnion, Maybe, PrettyIntersection, PropsAcrossUnion, Tree } from './types';
-
-export const identity = <T>(t: T): T => t;
+import { assert, identity } from './misc';
+import { flow } from './pipes';
+import { is, KeysAcrossUnion, Maybe, PrettyIntersection, PropsAcrossUnion, Scalar, Tree } from './types';
 
 export const inspect = <V>(fn: (v: V) => unknown) => <U extends V>(v: U): U => (fn(v), v);
 
 export const rec = ({
-    k: Object.keys as <K extends PropertyKey>(record: Record<K,unknown>) => K[],
-    v: Object.values as <V>(r: Record<PropertyKey, V>) => V[],
-    e: Object.entries as <K extends PropertyKey, V>(r: Record<K, V>) => [K, V][],
-    f: Object.fromEntries as <K extends PropertyKey, V>(a: Iterable<[K, V]>) => Record<K,V>,
+    k: Object.keys as <K extends string>(record: Record<K,unknown>) => K[],
+    v: Object.values as <V>(r: Record<string, V>) => V[],
+    e: Object.entries as <K extends string, V>(r: Record<K, V>) => [K, V][],
+    f: Object.fromEntries as <K extends string, V>(a: Iterable<[K, V]>) => Record<K,V>,
 
     // point-free tools
 
-    map: <V, U, K extends PropertyKey>(fn: (v: V, k: K) => U) =>
+    map: <V, U, K extends string>(fn: (v: V, k: K) => U) =>
         (record: Record<K,V>): Record<K,U> =>
             rec.e(record).reduce((l, [k,v]) => (l[k] = fn(v,k), l), {} as Record<K,U>),
 
-    filter: (<V, K extends PropertyKey>(fn: (v: V, k: K) => boolean) =>
+    filter: (<V, K extends string>(fn: (v: V, k: K) => boolean) =>
         (record: Record<K,V>): Record<K,V> =>
             rec.e(record).reduce((l, [k,v]) => (fn(v,k) ? l[k] = v : null, l), {} as Record<K,V>)) as
-        & (<V, U extends V, K extends PropertyKey>(fn: (v: V, k: K) => v is U) => (record: Record<K,V>) => Record<K,U>)
-        & (<V, K extends PropertyKey>(fn: (v: V, k: K) => boolean) => (record: Record<K,V>) => Record<K,V>),
+        & (<V, U extends V, K extends string>(fn: (v: V, k: K) => v is U) => (record: Record<K,V>) => Record<K,U>)
+        & (<V, K extends string>(fn: (v: V, k: K) => boolean) => (record: Record<K,V>) => Record<K,V>),
 
-    reduce: <V, U, K extends PropertyKey>(u: U, fn: (u: U, v: V, k: K) => U) =>
+    reduce: <V, U, K extends string>(u: U, fn: (u: U, v: V, k: K) => U) =>
         (record: Record<K, V>): U => rec.e(record).reduce((u, [k,v]) => fn(u,v,k), u),
 
     inspect: <V>(fn: (v: V) => void) =>
-        <R extends Record<PropertyKey,V>> (record: R): R =>
+        <R extends Record<string,V>> (record: R): R =>
             (rec.v(record).forEach(fn), record),
 
-    every: <V, K extends PropertyKey>(fn: (v: V, k: K) => boolean) => (record: Record<K,V>): boolean => {
+    every: <V, K extends string>(fn: (v: V, k: K) => boolean) => (record: Record<K,V>): boolean => {
         for (const [k,v] of rec.e(record)) {
             if (!fn(v,k)) return false;
         }
         return true;
     },
 
-    some: <V, K extends PropertyKey>(fn: (v: V, k: K) => boolean) => (record: Record<K,V>): boolean => {
+    some: <V, K extends string>(fn: (v: V, k: K) => boolean) => (record: Record<K,V>): boolean => {
         for (const [k,v] of rec.e(record)) {
             if (fn(v,k)) return true;
         }
@@ -47,68 +45,92 @@ export const rec = ({
     },
 
     // take a set of keys and a function and create a record with them
-    fromKeys: <K extends PropertyKey,V>(fn: (k: K) => V) => (keys: Iterable<K>): Record<K,V> =>
+    fromKeys: <K extends string,V>(fn: (k: K) => V) => (keys: Iterable<K>): Record<K,V> =>
         rec.f(flow(keys,
             iter.map(k => [k, fn(k)] as [K,V]),
-            iter.filter(([_,v]) => !is.undefined(v)))),
+            iter.filter(([_,v]) => !is.undefined(v))))
 });
 
 export const arr = {
+    from: <V>(i: Iterable<V>) => [...i],
+
+    of: <V>(v: V, n: number) => [...iter.repeatn(n)(v)],
+
     map: <V,U>(fn: (v: V, i: number) => U) =>
         (array: V[]): U[] => array.map(fn),
+
     filter: ((fn: (v: any, i: number) => unknown) => (a: any[]) => a.filter(fn)) as
         & (<V,U extends V>(fn: (v: V, i: number) => v is U) => (array: V[]) => U[])
         & (<V>(fn: (v: V, i: number) => boolean) => (array: V[]) => V[]),
+
     reduce: <V,U>(u: U, fn: (u: U, v: V, i: number) => U) =>
         (array: V[]): U => array.reduce(fn, u),
+
     inspect: <V>(fn: (v: V, i: number) => void) =>
         (array: V[]): V[] => (array.forEach(fn), array),
+
     every: <V>(fn: (v: V, i: number) => boolean) =>
         (array: V[]): boolean => array.every(fn),
+
     some: <V>(fn: (v: V, i: number) => boolean) =>
         (array: V[]): boolean => array.some(fn),
+
     sort: <V>(compare: (a: V, b: V) => number) => (array: V[]): V[] =>
-        flow([...array], a => (a.sort(compare), a)),
+        (a => (a.sort(compare), a))([...array]),
+
     order: <V>(orderBy: ((v: V, i: number) => number) | ((v: V, i: number) => string)) => (array: V[]): V[] =>
         flow(array.map((v,i) => [orderBy(v,i),v] as [number, V]),
             a => a.sort(([a],[b]) => a - b),
             arr.map(e => e[1])),
+
     includes: <V>(item: V) => (array: V[]) => array.includes(item),
+
     slice: <V>(start: number, stop?: number) =>
         (array: V[]): V[] => array.slice(start, stop),
+
     zip: <Q extends unknown[][]>(...arrays: Q): ArrayZipType<Q>[] =>
         flow(Math.min(...arrays.map(a => a.length)),
             iter.index,
             iter.map(i => arrays.map(a => a[i])),
             iter.collect) as any[],
+
     flatten: <V>(array: V[][]): V[] =>
         array.flatMap(identity),
+
     squash: <V>(array: DeepArray<V>): V[] =>
         [...iter.deep(array as DeepIter<V>)],
+
     partition: <V,U>(fn: (v: V, i: number) => U) => (array: V[]): Map<U,V[]> =>
         array.reduce((m,v,i) => {
             const key = fn(v,i);
             m.set(key, [...m.get(key) ?? [], v]);
             return m;
         }, new Map<U,V[]>()),
-    divide: <V>(n: number) => (array: V[]): [V[], V[]] =>
+
+    divide: (n: number) => <V>(array: V[]): [V[], V[]] =>
         [array.slice(0,n), array.slice(n)],
-    chunk: <V>(n: number) => (array: V[]): V[][] => {
-        const result = []
-        let rest = [...array];
-        while (n < rest.length) {
-            rest = flow(rest,
-                arr.divide(n),
-                ([part,rest]) => (result.push(part), rest));
+
+    chunk: (n: number) => <V>(iterable: Iterable<V>): V[][] => {
+        const result: V[][] = [];
+        let next: V[] = [];
+        for (const item of iterable) {
+            if (next.length >= n) {
+                result.push(next);
+                next = [];
+            }
+            next.push(item);
         }
-        result.push(rest);
+        if (next.length > 0)
+            result.push(next);
         return result;
     },
+
     lookup: <V, K extends PropertyKey>(fn: (v: V, i: number) => K) => (array: V[]): Record<K, V[]> =>
         array.reduce((l,v,i) => {
             const key = fn(v,i);
             return {...l, [key]: [...(l[key] ?? []), v]};
         }, {} as Record<K, V[]>),
+
     product: function*<T extends unknown[][]>(...axes: T): IterableIterator<ProductResultItem<T>> {
         if (axes.length === 0)
             return;
@@ -162,18 +184,24 @@ export type ProductResultItem<T extends unknown[][]> =
 
 export const str = {
     join: (joiner: string) => (parts: string[]): string => parts.join(joiner),
+
     includes: (part: string) => (s: string): boolean => s.includes(part),
+
     indexOf: (part: string) => (s: string): number | undefined =>
-        flow(s.indexOf(part), n => n > -1 ? n : undefined),
+        (n => n > -1 ? n : undefined)(s.indexOf(part)),
+
     slice: (start: number, stop?: number) => (s: string): string => s.slice(start, stop),
+
     split: (separator: string | RegExp) => (s: string): string[] => s.split(separator),
 };
 
 export const iter = {
     ate: <V>(i: Iterable<V>): Iterator<V> => i[Symbol.iterator](),
+
     map:<V,U>(fn: (v: V) => U) => function*(i: Iterable<V>): IterableIterator<U> {
         for (const item of i) yield fn(item);
     },
+
     filter: (<V>(fn: (v: V) => boolean) => function*<U extends V>(i: Iterable<U>): IterableIterator<U> {
         for (const item of i)
             if (fn(item))
@@ -181,11 +209,13 @@ export const iter = {
     }) as
         & (<V>(fn: (v: V) => boolean) => <U extends V>(i: Iterable<U>) => IterableIterator<U>)
         & (<V,U extends V>(fn: (v: V) => v is U) => (i: Iterable<V>) => IterableIterator<U>),
+    
     reduce: (<V,U>(u: U, fn: (u: U, v: V) => U) => (i: Iterable<V>): U => {
         for (const item of i)
             u = fn(u,item);
         return u;
     }),
+    
     zip: function*<Q extends Iterable<unknown>[]>(...iters: Q): IterableIterator<IterZipType<Q>> {
         const ptrs = iters.map(i => iter.ate(i));
         while(true) {
@@ -197,30 +227,66 @@ export const iter = {
             }
         }
     },
+
     chain: function *<T>(...iterables: Iterable<T>[]): IterableIterator<T> {
         for (const iterable of iterables)
             yield * iterable;
     },
+    
     take: <T>(i: Iterable<T>) => {
         const ix = iter.ate(i) as IterableIterator<T>;
         assert(Symbol.iterator in ix, 'iter.take: iterable produced Iterator instead of IterableIterator');
         const next = ix.next();
         return next.done ? undefined : {next: next.value, rest: ix};
     },
-    step: <T>(step: (t: T) => void) => (g: IterableIterator<T>): boolean =>
-        flow(g.next(), n => n.done ? false : (step(n.value), true)),
+
+    slice: ((a: number, b?: number) => function*<T>(i: Iterable<T>): IterableIterator<T> {
+        if (is.nullish(b)) {
+            for (const next of i) {
+                if (a-- > 0) yield next;
+                else return;
+            }
+        } else {
+            let n = b - a;
+            for (const next of i) {
+                if (a-- > 0) {}
+                else if (n-- > 0) yield next;
+                else return;
+            }
+        }
+    }) as
+        & ((end: number) => <T>(i: Iterable<T>) => IterableIterator<T>)
+        & ((start: number, end: number) => <T>(i: Iterable<T>) => IterableIterator<T>)
+    ,
+    
+    // apply this function to the next item in the iterator
+    // return false if there was nothing to apply to
+    step: <T>(fn: (t: T) => void) => (g: IterableIterator<T>): boolean => {
+        const n = g.next();
+        if (n.done) {
+            fn(n.value);
+            return true;
+        } else {
+            return false;
+        }
+    },
+    
     collect: <T>(i: Iterable<T>): T[] => {
         return [...i] as T[];
     },
+    
     enumerate: function*<T>(i: Iterable<T>): IterableIterator<[number,T]> {
         yield * iter.zip(iter.count(), i);
     },
+    
     count: function*(): IterableIterator<number> {
         let i=0; while(true) yield i++;
     },
+    
     index: function*(n: number): IterableIterator<number> {
         let i = 0; while (i<n) yield i++;
     },
+    
     deep: function*<T>(src: DeepIter<T>): IterableIterator<T> {
         const stack = [iter.ate(src)];
         while (stack.length) {
@@ -270,15 +336,51 @@ export const iter = {
         while(true) yield t;
     },
 
-    aperture: <V>(n: number) => function*(i: Iterable<V>): IterableIterator<V[]> {
+    repeatn: (n: number) => function*<T>(t: T): IterableIterator<T> {
+        while(n-- > 0) yield t;
+    },
+
+    loop: function*<T>(i: Iterable<T>): IterableIterator<T> {
+        while(true) yield* i;
+    },
+
+    chunk: (n: number) => function*<V>(i: Iterable<V>): IterableIterator<V[]> {
+        let c = [] as V[];
+        for (const item of i) {
+            c.push(item);
+            if (c.length === n) {
+                yield c;
+                c = [];
+            }
+        }
+        if (c.length > 0) {
+            yield c;
+        }
+    },
+
+    // take an iterable
+    // generate arrays of n-item subsequences of the iterable in order
+    aperture: (n: number) => function*<V>(i: Iterable<V>): IterableIterator<V[]> {
         const ap = [] as V[];
         for(const item of i) {
             ap.push(item);
-            if (ap.length > n) {
-                ap.shift();
+            if (ap.length === n) {
                 yield [...ap];
+                ap.shift();
             }
         }
+    },
+
+    // take an iterable
+    // generate arrays of n-item subsequences of the iterable in order
+    // include windows 'off the ends' of the input, extended with nulls
+    apertureExt: (n: number) => function*<V>(i: Iterable<V>): IterableIterator<(null | V)[]> {
+        yield * flow(iter.chain(
+                iter.repeatn(n-1)(null),
+                i,
+                iter.repeatn(n-1)(null)
+            ) as Iterable<null | V>,
+            iter.aperture(n));
     },
 
     include: <V>(keep: Iterable<V>) => function*(i: Iterable<V>): IterableIterator<V> {
@@ -309,12 +411,16 @@ export type DeepIter<T> = Iterable<T | DeepIter<T>>;
 export const maybe = {
     map: <V,U>(fn: (v: V) => U) => <T extends V>(thing: Maybe<T>): U | undefined =>
         thing == undefined ? undefined : fn(thing),
+
     mapElse: <V,U>(map: (v: V) => U, orElse: () => U) => <T extends V>(thing: Maybe<T>): U =>
         thing == undefined ? orElse() : map(thing),
+
     mapOr: <V,U>(map: (v: V) => U, or: U) => (thing: V | null | undefined): U =>
         thing == undefined ? or : map(thing),
+
     or: <U>(u: U) => <V>(thing: Maybe<V>) : V | U =>
         thing ?? u,
+
     orElse: <U>(fn: () => U) => <V>(thing: Maybe<V>) : V | U =>
         thing ?? fn(),
 }
@@ -414,13 +520,19 @@ export type DispatchOver<X extends string, Q extends {[K in X]: string}> = {
 export type DispatchVariantFor<X extends string, Q, K> = PrettyIntersection<{[XX in X]: K} & Q>
 
 export const tree = {
-    clone: <V>(t: Tree<V>): Tree<V> => {
+    clone: <V extends Scalar | Date | null>(t: Tree<V>): Tree<V> => {
         if (is.array(t))
             return t.map(tree.clone);
         else if (is.record(t))
             return rec.map(tree.clone)(t);
-        else
+        else if (is.date(t))
+            return new Date(t) as V
+        else if (is.null(t))
+            return null as V;
+        else if (is.scalar(t))
             return t;
+        else
+            throw new Error('tree clone can only accept scalars, dates, and nulls at leaves');
     },
 
     map: <V,U>(fn: (v: V) => U) => {
