@@ -2,24 +2,27 @@ import { flow } from "./pipes";
 import { tree } from "./transforms";
 
 export type PrettyIntersection<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
-
 export type Maybe<T> = T | null | undefined;
-
 export type MaybePromise<T> = T | Promise<T>;
+export type Scalar = string | number | boolean | bigint;
 
 export const is = {
     undefined: (thing: unknown): thing is undefined => thing === undefined,
     null: (thing: unknown): thing is null => thing === null,
 
+    boolean: (thing: unknown): thing is boolean => (typeof thing) === 'boolean',
     string: (thing: unknown): thing is string => (typeof thing) === 'string',
     number: (thing: unknown): thing is number => (typeof thing) === 'number',
     object: (thing: unknown): thing is object => (typeof thing) === 'object',
     function: (thing: unknown): thing is Function => (typeof thing) === 'function',
     bigint: (thing: unknown): thing is bigint => (typeof thing) === 'bigint',
 
+    scalar: (thing: unknown): thing is Scalar =>
+        is.string(thing) || is.number(thing) || is.boolean(thing) || is.bigint(thing),
+
     nullish: (t: unknown): t is null | undefined => (t == null),
 
-    real: (t: unknown): t is number => is.number(t) && !Number.isNaN(t),
+    real: (t: unknown): t is number => is.number(t) && Number.isFinite(t),
     
     array: <T>(thing: unknown | T[]): thing is T[] => Array.isArray(thing),
 
@@ -27,11 +30,11 @@ export const is = {
         !is.array(thing) && is.object(thing),
 
     promise: <T>(thing: MaybePromise<T>): thing is Promise<T> =>
-        ('then' in (thing as object) && is.function((thing as {then: unknown}).then)),
+        ('then' in (thing as object) && is.function((thing as any).then)),
 
     set: (thing: unknown): thing is Set<unknown> => (thing instanceof Set),
     map: (thing: unknown): thing is Map<unknown, unknown> => (thing instanceof Map),
-    date: (thing: unknown): thing is Date => (thing instanceof Date && is.real(thing.valueOf())),
+    date: (thing: unknown): thing is Date => (thing instanceof Date && Number.isFinite(thing.valueOf())),
 }
 
 // nominal types
@@ -52,3 +55,12 @@ export const makeJSONSerializable = (pod: PlainOldData): JSONSerializable => flo
 export type KeysAcrossUnion<T> = T extends infer TT ? string & keyof TT : never;
 
 export type PropsAcrossUnion<T> = T extends infer TT ? TT[keyof TT] : never;
+
+export type Tuple<A extends unknown[]> =
+    A extends [] ? [] :
+    A extends [infer H, ...infer T] ?
+        [H, ...Tuple<T>] :
+        never
+;
+
+export const tuple = <TupleParts extends unknown[]>(...parts: TupleParts): Tuple<TupleParts> => parts as any;

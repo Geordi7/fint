@@ -17,7 +17,7 @@ export type Chain<T1> =
 // call it with a unary operation to produce the new value
 // call it with no argument to extract the value
 export const chain = <T1>(i: T1): Chain<T1> =>
-    (<T2>(op?: (i: T1) => T2) => op ? C(op(i)) : i) as any;
+    (<T2>(op?: (i: T1) => T2) => op ? chain(op(i)) : i) as any;
 export const flow = ((u: unknown, ...fns: ((u: unknown) => unknown)[]): unknown => {
     for (const fn of fns) {
         u = fn(u);

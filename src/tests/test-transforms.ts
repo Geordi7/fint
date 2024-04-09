@@ -41,6 +41,29 @@ export function test() {
         });
 
         describe('iter', () => {
+            describe('iter.chain', () => {
+                it('chains iterators together', () => {
+                    const i = iter.chain(iter.index(3), [9,9,9], iter.repeatn(2)(-1));
+                    const c = [...i];
+
+                    expect(c).deep.equals([0,1,2,9,9,9,-1,-1]);
+                });
+            });
+
+            describe('iter.chunk', () => {
+                it('produces chunks from an iterator', () => {
+                    const i = iter.index(20);
+                    const c = [...iter.chunk(6)(i)];
+
+                    expect(c).deep.equals([
+                        [0,1,2,3,4,5],
+                        [6,7,8,9,10,11],
+                        [12,13,14,15,16,17],
+                        [18,19]
+                    ]);
+                });
+            });
+
             describe('iter.repeat', () => {
                 it('produces the same value repeatedly', () => {
                     const checkvalue = Math.random();
@@ -52,6 +75,54 @@ export function test() {
                     check(i);
                     check(i);
                     check(i);
+                });
+            });
+
+            describe('iter.repeatn', () => {
+                it('produces the same a specific number of times', () => {
+                    const checkvalue = Math.random();
+                    const i = iter.repeatn(6)(checkvalue);
+                    const a = [...i];
+
+                    expect(a).deep.equals([checkvalue, checkvalue, checkvalue, checkvalue, checkvalue, checkvalue]);
+                });
+            });
+
+            describe('iter.aperture', () => {
+                it('produces a sequence of subsequences of a specific length', () => {
+                    const sequence = [1,2,3,4,5,6,7,8];
+                    const a = [...iter.aperture(3)(sequence)];
+                    
+                    expect(a).deep.equals([
+                        [1,2,3],
+                        [2,3,4],
+                        [3,4,5],
+                        [4,5,6],
+                        [5,6,7],
+                        [6,7,8],
+                    ]);
+                });
+            });
+            
+            describe('iter.apertureExt', () => {
+                it('produces a sequence of subsequences of a specific length padding with nulls', () => {
+                    const sequence = [1,2,3,4,5,6,7,8];
+                    const a = [...iter.apertureExt(3)(sequence)];
+
+                    const n = null;
+                    
+                    expect(a).deep.equals([
+                        [n,n,1],
+                        [n,1,2],
+                        [1,2,3],
+                        [2,3,4],
+                        [3,4,5],
+                        [4,5,6],
+                        [5,6,7],
+                        [6,7,8],
+                        [7,8,n],
+                        [8,n,n],
+                    ]);
                 });
             });
         });
@@ -85,6 +156,22 @@ export function test() {
                     ]);
                 });
             });
+
+            describe('arr.chunk', () => {
+                it('chunks an input iterable', () => {
+                    const i = iter.index(20);
+                    const c = arr.chunk(6)(i);
+
+                    expect(c).deep.equals([
+                        [0,1,2,3,4,5],
+                        [6,7,8,9,10,11],
+                        [12,13,14,15,16,17],
+                        [18,19]
+                    ]);
+                });
+            });
+
+
         });
 
         describe('tree', () => {
