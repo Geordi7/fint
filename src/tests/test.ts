@@ -10,3 +10,6 @@ transforms.test();
 
 import * as types from './test-types';
 types.test();
+
+import * as proxy from './test-proxy';
+proxy.test();
