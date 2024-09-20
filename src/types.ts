@@ -37,6 +37,15 @@ export const is = {
     date: (thing: unknown): thing is Date => (thing instanceof Date && Number.isFinite(thing.valueOf())),
 }
 
+// exhaust(value, message) - type utility function
+//  when resolving a union, the left over value after all possiblities have been exhausted should have type never
+//  pass the variable into this function, with relevant message for the resulting error
+//  typescript will guard against calling this function on a non-never value
+//  and if at runtime an unexpected value arrives it will turn into a runtime error
+export function exhaust(_: never, msg: string): never {
+    throw new Error(msg);
+}
+
 // nominal types
 declare const brand: unique symbol;
 export type Nominal<T, Label extends string> = T & {readonly [brand]: Label};
@@ -55,6 +64,11 @@ export const makeJSONSerializable = (pod: PlainOldData): JSONSerializable => flo
 export type KeysAcrossUnion<T> = T extends infer TT ? string & keyof TT : never;
 
 export type PropsAcrossUnion<T> = T extends infer TT ? TT[keyof TT] : never;
+
+export type RequiredKeys<T> =
+    keyof T extends infer K ? K extends keyof T ?
+        undefined extends T[K] ? never : K : never : never
+;
 
 export type Tuple<A extends unknown[]> =
     A extends [] ? [] :
