@@ -1,6 +1,6 @@
 {
   "name": "@geordi7/fint",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Strongly typed tools for typescript",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
