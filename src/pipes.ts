@@ -18,6 +18,11 @@ export type Chain<T1> =
 // call it with no argument to extract the value
 export const chain = <T1>(i: T1): Chain<T1> =>
     (<T2>(op?: (i: T1) => T2) => op ? chain(op(i)) : i) as any;
+
+// flow builder
+// call with a value and a sequence of functions to apply
+// applies the first function to the value and each successive
+// function to the result of the previous one
 export const flow = ((u: unknown, ...fns: ((u: unknown) => unknown)[]): unknown => {
     for (const fn of fns) {
         u = fn(u);
