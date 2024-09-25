@@ -120,9 +120,9 @@ export class ResultOk<R0> implements IResult<R0,never> {
         return this.r;
     }
     ok(): R0 {return this.r;}
-    isOk(): true {return true;}
+    isOk(): this is ResultOk<R0> {return true;}
     err(): never {throw new Error(`Result is Ok but Err expected`);}
-    isErr(): false {return false;}
+    isErr(): this is ResultErr<never> {return false;}
     toString(): string {return `Ok(${String(this.r)})`;}
 }
 
@@ -156,9 +156,9 @@ export class ResultErr<E0> implements IResult<never,E0> {
         else
             throw new Error(String(this.e));
     }
-    isOk(): false {return false;}
+    isOk(): this is ResultOk<never> {return false;}
     err(): E0 {return this.e;}
-    isErr(): true {return true;}
+    isErr(): this is ResultErr<E0> {return true;}
     toString(): string {return `Err(${String(this.e)})`;}
 }
 

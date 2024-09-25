@@ -6,3 +6,4 @@ export * from './proxy';
 export * from './result';
 export * from './transforms';
 export * from './types';
+export * from './event-tree';

@@ -1,14 +1,5 @@
 
-export const readProxy = <U>(proxy: (s: string) => U) => new Proxy({},
-    Object.assign(neverProxyHandler<{[K in string]: U}>('readProxy'), {
-        get(target: {[K in string]: U}, p: string) {
-            target[p] = target[p] ?? proxy(p);
-            return target[p];
-        },
-    })
-);
-
-const neverProxyHandler = <U extends object>(label: string): ProxyHandler<U> => ({
+export const neverProxyHandler = <U extends object>(label: string): ProxyHandler<U> => ({
     set() {
         throw new Error(`set(): Cannot set properties on a ${label}`);
     },
@@ -40,7 +31,7 @@ const neverProxyHandler = <U extends object>(label: string): ProxyHandler<U> => 
         return false;
     },
     ownKeys() {
-        throw new Error(`ownKeys(): Cannot query for own keys of as ${label}`);
+        throw new Error(`ownKeys(): Cannot query for own keys of a ${label}`);
     },
     preventExtensions() {
         return false;
@@ -49,3 +40,40 @@ const neverProxyHandler = <U extends object>(label: string): ProxyHandler<U> => 
         throw new Error(`setPrototypeOf(): Cannot set prototype of a ${label}`);
     }
 })
+
+export const readProxy = <U>(proxy: (s: string) => U) => readProxyLabelled('readProxy', proxy);
+
+export const readProxyLabelled = <U>(label: string, proxy: (s: string) => U) => new Proxy({},
+    Object.assign(neverProxyHandler<{[K in string]: U}>(label), {
+        get(target: {[K in string]: U}, p: string) {
+            target[p] = target[p] ?? proxy(p);
+            return target[p];
+        },
+    })
+);
+
+export type PathFunctionProxy<Fn extends Function> = (Fn & {[K in string]: PathFunctionProxy<Fn>})
+
+export const pathFunctionProxy = <Fn extends Function>(proxy: (path: string[]) => Fn) => pathFunctionProxyLabelled('pathFunctionProxy', proxy);
+
+export const pathFunctionProxyLabelled = <Fn extends Function>(label: string, proxy: (path: string[]) => Fn) => _pathFunctionProxy(label, [], proxy);    
+
+const _pathFunctionProxy = <Fn extends Function>(label: string, path: string[], proxy: (path: string[]) => Fn) => new Proxy(
+    
+     // this never gets called
+     // but without it there will be a type-error before apply is called
+    (() => {}) as any,
+
+    Object.assign(neverProxyHandler<PathFunctionProxy<Fn>>(label), {
+        // get builds the next layer of proxy
+        get(target: {[K in string]: PathFunctionProxy<Fn>}, p: string) {
+            target[p] = target[p] ?? _pathFunctionProxy(label, [...path, p], proxy);
+            return target[p];
+        },
+        // target is this proxy, self is the parent proxy (or undefined)
+        // we only care about path anyway
+        apply(_target: unknown, _self: unknown, args: unknown[]) {
+            return proxy(path)(...args);
+        }
+    })
+) as PathFunctionProxy<Fn>;
