@@ -5,6 +5,11 @@ export type PrettyIntersection<V> = Extract<{ [K in keyof V]: V[K] }, unknown>;
 export type Maybe<T> = T | null | undefined;
 export type MaybePromise<T> = T | Promise<T>;
 export type Scalar = string | number | boolean | bigint;
+export type Sync<T> =
+    T extends Promise<infer V> ? V :
+    T extends ((...args: infer A) => Promise<infer R>) ? ((...args: A) => R) :
+    T
+;
 
 export const is = {
     undefined: (thing: unknown): thing is undefined => thing === undefined,
