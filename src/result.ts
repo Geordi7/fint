@@ -82,17 +82,32 @@ export const Result = {
         }
 
         return r;
-    }
+    },
+
+    all: <R,E>(i: Iterable<Result<R,E>>): Result<R[], E[]> => {
+        const {ok,err} = Result.collect(i);
+
+        return (err.length > 0) ? Err(err) : Ok(ok);
+    },
+
+    any: <R,E>(i: Iterable<Result<R,E>>): Result<R[], E[]> => {
+        const {ok,err} = Result.collect(i);
+
+        return (ok.length > 0) ? Ok(ok) : Err(err);
+    },
 
 } satisfies 
+    // I want this because it guarantees all the point free ops are included
+    & {[K in keyof IResult<unknown, unknown>]: unknown}
     & {
         Ok: unknown,
         Err: unknown,
         lift: unknown,
-        capture: unknown
-        collect: unknown
+        capture: unknown,
+        collect: unknown,
+        all: unknown,
+        any: unknown,
     }
-    & {[K in keyof IResult<unknown, unknown>]: unknown}
 ;
 
 export class ResultOk<R0> implements IResult<R0,never> {

@@ -1,5 +1,5 @@
 
-import { assert, identity } from './misc';
+import { assert } from './misc';
 import { flow } from './pipes';
 import { is, KeysAcrossUnion, Maybe, PrettyIntersection, PropsAcrossUnion, Scalar, Tree, tuple } from './types';
 
@@ -122,7 +122,7 @@ export const arr = {
             iter.collect) as any[],
 
     flatten: <V>(array: V[][]): V[] =>
-        array.flatMap(identity),
+        array.flat(1),
 
     squash: <V>(array: DeepArray<V>): V[] =>
         [...iter.deep(array as DeepIter<V>)],
@@ -187,8 +187,32 @@ export const arr = {
         }
     },
 
-    // DFS style array expansion
-    // no intrinsic duplicate checking!
+    // DFS capable array expansion
+    // each element is replaced by the results of fn
+    // then iteration continues from the next item that has not been considered
+    knit: <A>(fn: (v: A, i: number, scarf: ReadonlyArray<A>) => A[]) => (array: A[]): A[] => {
+        const output = [...array];
+
+        let i = 0;
+        while (i < output.length) {
+            const v = output[i];
+            const items = fn(v, i, output);
+
+            if (items.length === 0) {
+                output.splice(i, 1);
+            } else {
+                output.splice(i, 1, ...items);
+                
+                if (items[0] === v || Object.is(items[0], v)) {
+                    i++;
+                }
+            }
+        }
+
+        return output;
+    },
+
+    // not-quite DFS capable array expansion
     inflate: <A>(fn: (v: A, i: number, balloon: ReadonlyArray<A>) => A[]) => (array: A[]): A[] => {
         const output = [...array];
 
@@ -198,6 +222,7 @@ export const arr = {
                 output.push(...fn(output[i], i, output));
             else
                 output.splice(i + 1, 0, ...fn(output[i], i, output));
+            i++;
         }
         
         return output;
@@ -205,12 +230,13 @@ export const arr = {
 
     // BFS style array expansion
     // no intrinsic duplicate checking!
-    unroll: <A>(fn: (v: A, i: number, balloon: ReadonlyArray<A>) => A[]) => (array: A[]): A[] => {
+    unroll: <A>(fn: (v: A, i: number, carpet: ReadonlyArray<A>) => A[]) => (array: A[]): A[] => {
         const output = [...array];
 
         let i = 0;
         while (i < output.length) {
             output.push(...fn(output[i], i, output));
+            i++;
         }
         
         return output;

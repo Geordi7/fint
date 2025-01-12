@@ -171,7 +171,90 @@ export function test() {
                 });
             });
 
+            const graph = {
+                0: [1,2],
+                1: [4,5],
+                2: [3,5],
+                3: [2],
+                4: [6,1],
+                5: [4,3],
+                6: [2,4,5],
+            } as Record<number, number[]>;
 
+            describe('arr.knit', () => {
+                it('expands an array allowing for removal of an elemnt, consideres all elements including new ones', () => {
+                    const i = [1,2,3,4,5];
+                    const c = arr.knit(n =>
+                        n === 1 ? [] :
+                        n === 3 ? [30] :
+                        n === 4 ? [40] :
+                        n === 40 ? [41] :
+                        n === 5 ? [5,6,7,8] :
+                        [n]
+                    )(i);
+
+                    expect(c).deep.equals([2, 30, 41, 5, 6, 7, 8]);
+                });
+
+                it('can be used to perform DFS', () => {
+                    const v = new Set<number>();
+                    const c = arr.knit((n: number) => {
+                        if (v.has(n)) return [];
+
+                        v.add(n);
+                        return [n, ...graph[n].filter(nn => !v.has(nn))];
+                    }
+                    )([0]);
+
+                    expect(c).deep.equals([0,1,4,6,2,3,5]);
+                });
+            });
+
+            describe('arr.inflate', () => {
+                it('expands an array following the current item, considers all elements including new ones', () => {
+                    const i = [1,2,3];
+                    const c = arr.inflate(n => n === 1 ? [0] : [])(i);
+
+                    expect(c).deep.equals([1,0,2,3]);
+                });
+
+                it('can be used to perform a bizarre graph search', () => {
+                    const v = new Set<number>();
+                    const c = arr.inflate((n: number) => {
+                        v.add(n);
+                        return graph[n].filter(nn => !v.has(nn));
+                    }
+                    )([0]);
+
+                    expect(c).deep.equals([0,1,4,6,2,3,5,5,5,2]);
+                });
+            });
+
+            describe('arr.unroll', () => {
+                it('expands the back of an array, considers all elements including new ones', () => {
+                    const i = [1,2,3];
+                    const c = arr.unroll(n =>
+                        n === 1 ? [4] :
+                        n === 4 ? [5] :
+                        []
+                    )(i);
+
+                    expect(c).deep.equals([1,2,3,4,5]);
+                });
+
+                it('can be used to perform BFS', () => {
+                    const v = new Set<number>();
+                    const c = arr.unroll((n: number) => {
+                        v.add(n);
+                        const next = graph[n].filter(nn => !v.has(nn));
+                        next.forEach(nn => v.add(nn));
+                        return next;
+                    }
+                    )([0]);
+
+                    expect(c).deep.equals([0,1,2,4,5,3,6]);
+                });
+            });
         });
 
         describe('tree', () => {
