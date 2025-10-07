@@ -5,6 +5,7 @@ import {expect} from 'chai';
 import {
     arr,
     dispatch,
+    hstr,
     iter,
     match,
     tree,
@@ -315,6 +316,104 @@ export function test() {
                 });
             });
         });
+
+        describe('hstr', () => {
+            describe('hstr.render', () => {
+                it('joins arrays of strings with newlines', () => {
+                    expect(hstr.render('-')(['a','b']))
+                        .equals('a\nb');
+                });
+
+                it('indents nested hstrs', () => {
+                    expect(hstr.render('-')(['a',['b'],'c']))
+                        .equals('a\n-b\nc');
+                });
+            });
+
+            describe('hstr.end', () => {
+                it('appends the postfix to the back of the last string', () => {
+                    const a = ['a','b'];
+                    const b = hstr.end('t')(a);
+                    expect(hstr.render('')(b))
+                        .equals('a\nbt');
+                });
+                
+                it('does not affect the original hstr', () => {
+                    const a = ['a','b'];
+                    hstr.end('t')(a);
+                    expect(hstr.render('')(a))
+                        .equals('a\nb');
+                });
+                    
+                it('deeply appends the postfix to the back of the last string', () => {
+                    const a = ['a',['b',['c']]];
+                    const b = hstr.end('t')(a);
+                    expect(hstr.render('-')(b))
+                        .equals('a\n-b\n--ct');
+                });
+
+                it('postfixes an empty HStr', () => {
+                    expect(hstr.render('')(hstr.end('t')([])))
+                        .equals('t');
+                })
+            })
+
+            describe('hstr.separate', () => {
+                it('adds the separator to the end of each item except the last one', () => {
+                    const a = ['a','b','c'];
+                    const b = hstr.separate('t')(a);
+                    expect(hstr.render('')(b))
+                        .equals('at\nbt\nc');
+                });
+                
+                it('deeply adds the separator to the end of each item except the last one', () => {
+                    const a = [['a','b'],['c','d'],['e','f']];
+                    const b = hstr.separate('t')(a);
+                    expect(hstr.render('-')(['(', ...b, ')']))
+                        .equals('(\n-a\n-bt\n-c\n-dt\n-e\n-f\n)');
+                });
+
+                it('does not affect the original hstr', () => {
+                    const a = ['(',['a','b'],['c','d'],['e','f'],')'];
+                    hstr.separate('t')(a);
+                    expect(hstr.render('-')(a))
+                        .equals('(\n-a\n-b\n-c\n-d\n-e\n-f\n)');
+                });
+
+                it('has no effect on an empty HStr', () => {
+                    expect(hstr.render('')(hstr.separate('s')([])))
+                        .equals('');
+                });
+            });
+
+            describe('hstr.endings', () => {
+                it('adds the separator to the end of each item', () => {
+                    const a = ['a','b','c'];
+                    const b = hstr.endings('t')(a);
+                    expect(hstr.render('')(b))
+                        .equals('at\nbt\nct');
+                });
+                
+                it('deeply adds the separator to the end of each item except the last one', () => {
+                    const a = [['a',['b']],['c',['d']],['e',['f']]];
+                    const b = hstr.endings('t')(a);
+                    expect(hstr.render('-')(['(', ...b, ')']))
+                        .equals('(\n-a\n--bt\n-c\n--dt\n-e\n--ft\n)');
+                });
+
+                it('does not affect the original hstr', () => {
+                    const a = ['(',['a','b'],['c','d'],['e','f'],')'];
+                    hstr.endings('t')(a);
+                    expect(hstr.render('-')(a))
+                        .equals('(\n-a\n-b\n-c\n-d\n-e\n-f\n)');
+                });
+
+                it('has no effect on an empty HStr', () => {
+                    expect(hstr.render('')(hstr.endings('s')([])))
+                        .equals('');
+                });
+            });
+        })
     });
 }
 

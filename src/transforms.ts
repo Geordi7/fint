@@ -1,7 +1,7 @@
 
 import { assert } from './misc';
 import { flow } from './pipes';
-import { is, KeysAcrossUnion, Maybe, PrettyIntersection, PropsAcrossUnion, Scalar, Tree, tuple } from './types';
+import { HStr, is, KeysAcrossUnion, Maybe, PrettyIntersection, PropsAcrossUnion, Scalar, Tree, tuple } from './types';
 
 export const inspect = <V>(fn: (v: V) => unknown) => <U extends V>(v: U): U => (fn(v), v);
 
@@ -52,6 +52,20 @@ export const rec = ({
 
     reduce: <V, U, K extends string>(u: U, fn: (u: U, v: V, k: K) => U) =>
         (record: Record<K, V>): U => rec.e(record).reduce((u, [k,v]) => fn(u,v,k), u),
+
+    visit: <V, U>(fn: (visit: (node: Record<string, U>) => void, u: U, k: string) => V | V[]) => (r: Record<string,U>) => {
+        const out = [] as (V | V[])[];
+        const visited = new WeakSet<any>();
+        const visit = (node: Record<string, U>) => {
+            if (visited.has(node)) return;
+            visited.add(node);
+            for (const [k,u] of rec.ie(r)) {
+                out.push(fn(visit, u,k));
+            }
+        };
+        visit(r);
+        return out.flat() as V[];
+    },
 
     inspect: <V, K extends string>(fn: (v: V, k: K) => void) =>
         <R extends Record<string,V>> (record: R): R =>
@@ -652,4 +666,63 @@ export const tree = {
 
         return (tree: Tree<V>) => pfn(tree) as Tree<V> | undefined;
     }
+}
+
+export const hstr = {
+    render: (indent: string = '  ') => (hs: HStr) => {
+        return _renderHStr(hs, indent, '').join('\n');
+    },
+
+    // sometimes, you need to separate each item at a particular layer with a separator,
+    // but you don't want a trailing separator. This is really annoying to accomplish
+    // so use this function
+    separate: (sep: string) => (hs: HStr) => {
+        return hs.map((s,i) => {
+            if (i + 1 < hs.length) {
+                if (is.array(s))
+                    return hstr.end(sep)(s);
+                else
+                    return s + sep;
+            } else {
+                return s
+            }
+        });
+    },
+
+    // recursively find the end of a hierarchical string, and add postfix to it
+    end: (postfix: string) => (hs: HStr): HStr => {
+        if (hs.length === 0)
+            return [postfix];
+
+        const r = [...hs];
+        const at = r.at(-1);
+
+        if (is.array(at)) {
+            r[r.length - 1] = hstr.end(postfix)(at);
+        } else if (is.string(at)) {
+            r[r.length - 1] += postfix;
+        }
+
+        return r;
+    },
+
+    endings: (postfix: string) => (hs: HStr): HStr => {
+        return hs.map(s => (is.array(s)) ?
+            hstr.end(postfix)(s) :
+            s + postfix
+        );
+    },
+}
+
+function _renderHStr(hs: HStr, indent: string, prefix: string) {
+    const lines = [] as string[];
+    for (const s of hs) {
+        if (is.array(s)) {
+            lines.push(..._renderHStr(s, indent, indent + prefix));
+        } else {
+            lines.push(prefix + s);
+        }
+    }
+
+    return lines;
 }

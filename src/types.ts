@@ -11,6 +11,8 @@ export type Sync<T> =
     T
 ;
 
+export type HStr = (string | HStr)[];
+
 export const is = {
     undefined: (thing: unknown): thing is undefined => thing === undefined,
     null: (thing: unknown): thing is null => thing === null,
