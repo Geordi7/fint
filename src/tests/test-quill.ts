@@ -1,18 +1,21 @@
 
 import * as quill from '../quill';
-import { All, One } from '../quill';
 
-    // quote: s => `"${s.replaceAll('"','""')}"`,
-    // conditional: (cases, otherwise) => cases.length === 0 ? otherwise : 
-    //     `(CASE ${
-    //         cases.map(({predicate, result}) => `CASE ${predicate} THEN ${result}`).join(' ')
-    //     } ELSE ${otherwise})`,
+// quote: s => `"${s.replaceAll('"','""')}"`,
+// conditional: (cases, otherwise) => cases.length === 0 ? otherwise : 
+//     `(CASE ${
+//         cases.map(({predicate, result}) => `WHEN ${predicate} THEN ${result}`).join(' ')
+//     } ELSE ${otherwise})
+//     END`,
 
 const Q = quill.quill({
     exec: async q => q,
     render: q => {
         console.log('QUERY:', JSON.stringify(q, null, '  '));
-        return 'query!';
+        return {
+            rendered: 'query!',
+            params: q.query
+        };
     },
     embed: rs => {
         const s = quill.defaultEmbedding(rs);
@@ -22,7 +25,7 @@ const Q = quill.quill({
 }, {
     types: {
         employee: {inhabits: 'Employees', dt: 'int'},
-        department: {inhabits: 'Departments', dt: 'int'},
+        Department: {inhabits: 'Departments', dt: 'int'},
         budget: {inhabits: 'Budgets', dt: 'int'},
         email: {dt: 'text'},
     },
@@ -46,9 +49,9 @@ const Q = quill.quill({
             },
         },
         Departments: {
-            id: 'id',
+            id: 'dept',
             fields: {
-                id: 'department',
+                dept: 'Department',
                 name: 'text',
                 head: 'employee',
             },
@@ -63,7 +66,7 @@ const Q = quill.quill({
             },
         },
         EmployeeRoles: {
-            id: ['employee','department'],
+            id: ['employee','role'],
             fields: {
                 employee: 'employee',
                 role: 'role',
@@ -79,54 +82,72 @@ const Q = quill.quill({
     },
 });
 
-const employee_names_and_emails = Q(() => null, (s) => {
+//const employee_names_and_emails =
+Q(() => null, ({s}) => {
     const emp = s.Employees();
     const {name: name_en} = s.EmployeeNames(emp, {lang: 'en'});
     const {name: name_el} = s.EmployeeNames(emp, {lang: 'el'});
 
-    return {[All]: {
+    return {
         Number: emp.id,
         'Name (English)': name_en,
         'Name (Greek)': name_el,
         Email: emp.email
-    }};
+    };
     // {Name: {source: 'Employees', instance: 0, field: 'name_en'}, Email: {}}
 });
 
-const role_owner_report = (owner_id: number) => Q(() => null, (s) => {
+`
+SELECT
+    *
+FROM
+    Roles T1,
+    Employees T2,
+    Employees T3,
+    EmployeeRoles T4
+WHERE
+    T4.role = T1.role
+    AND T4.employee = T2.id
+    AND T3.id = T4.owner
+    AND T3.id = ?
+`
+const role_owner_report = Q(() => null, ({s, ops: {param, join}}) => {
     const role = s.Roles();
     const employee = s.Employees();
-    const owner = s.Employees(role.owner, {id: owner_id});
+    const owner = s.Employees(role.owner, {id: param.int('roleOwner')});
+    
     s.EmployeeRoles(role, employee);
 
-    return {[One]: {
-        Owner: owner,
-        Role: role,
-        Employees: {[All]: {employee}},
-    }};
+    return {
+        Owner: owner.email,
+        Role: join(' ', role.name, role.description),
+        Employee: employee.email,
+    };
 });
 
-Q(() => null, (s,ops) => {
-    const {where, is, any, sum} = ops;
+role_owner_report.exec({roleOwner: 45});
 
-    const customer = s.customers();
-    const item = s.items();
-    const invoice = s.Invoices(customer, {cancelled: 'N'});
-    const {quantity, value} = s.InvoiceLines(item, invoice);
+// Q(() => null, (s,ops) => {
+//     const {where, is, any, sum} = ops;
 
-    where(
-        is(invoice.date).inRange('2024-01-01', '2025-01-01'),
-        any(
-            is(sum(quantity)).greaterThan(1000),
-            is(sum(value)).greaterThan(10000),
-        ),
-    );
+//     const customer = s.customers();
+//     const item = s.items();
+//     const invoice = s.Invoices(customer, {cancelled: 'N'});
+//     const {quantity, value} = s.InvoiceLines(item, invoice);
 
-    return {[All]: {
-        customer,
-        item,
-        quantity: sum(quantity),
-        value: sum(value),
-    }};
-});
+//     where(
+//         is(invoice.date).inRange('2024-01-01', '2025-01-01'),
+//         any(
+//             is(sum(quantity)).greaterThan(1000),
+//             is(sum(value)).greaterThan(10000),
+//         ),
+//     );
+
+//     return {[All]: {
+//         customer,
+//         item,
+//         quantity: sum(quantity),
+//         value: sum(value),
+//     }};
+// });
 

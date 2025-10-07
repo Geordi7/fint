@@ -1,14 +1,16 @@
 import { flow } from "./pipes";
-import { rec } from "./transforms";
+import { hstr, match, rec } from "./transforms";
 import { is } from "./types";
 
-export const quill = (dialect: Dialect, rschema: RelaxedSchema): Quill => {
-    const schema: Schema = dialect.embed ?
-        dialect.embed(rschema) :
+export const quill = (broker: Broker, rschema: RelaxedSchema): Quill => {
+    const schema: Schema = broker.embed ?
+        broker.embed(rschema) :
         defaultEmbedding(rschema);
 
-    return async <T>(parser: Parser<T>, queryBuilder: (r: RelationSource, ops: Ops) => Query): Promise<T> => {
+    return <T, P extends QueryParametersBase>(parser: Parser<T>, queryBuilder: (tools: QueryBuilderTools) => Query<P>): QueryHost<P,T> => {
         const instances = [] as {relation: string, constraints: Constraint[]}[];
+
+        // create schema access
         const s = flow(schema.relations, rec.map((r,rn) => (...c: Constraint[]) => {
             const i = instances.length;
             instances.push({
@@ -24,16 +26,32 @@ export const quill = (dialect: Dialect, rschema: RelaxedSchema): Quill => {
             } as RelationRef;
         }));
 
+        // global query conditions
         const conditions = [] as BExpr[];
 
-        const query = queryBuilder(s, createOps((...b) => {conditions.push(...b)}));
+        // run querybuilder
+        const query = queryBuilder({
+            s,
+            ops: createOps(),
+            where: (...b) => {conditions.push(...b);}
+        });
 
-        console.log('INSTANCES:', instances);
+        //@DEBUG
+        console.log('INSTANCES:', JSON.stringify(instances, null, '  '));
         console.log(JSON.stringify(query, null, '  '));
 
-        return is.function(parser) ?
-            parser(null) :
-            parser.parse(null);
+        // const [qtype, queryshape] = query;
+        // console.log(qtype, queryshape)
+
+        return {
+            exec: async (params?: P) => {
+                console.log(params);
+
+                return is.function(parser) ?
+                    parser(null) :
+                    parser.parse(null);
+            },
+        }
     }
 };
 
@@ -50,6 +68,16 @@ export const defaultEmbedding = (schema: RelaxedSchema): Schema => {
             )),
         }))),
     };
+};
+
+export const createSQLBroker(sd: SQLDialect, exec: (sql: string, params: Record<string, unknown>) => Promise<unknown>): Broker {
+    const sr = createSQLRenderer(sd);
+    return {
+        exec,
+        render(query) {
+            
+        },
+    }
 };
 
 export type RelationSource = Record<string, (...c: Constraint[]) => RelationRef>;
@@ -93,27 +121,57 @@ export type Field = {
     type: string | string[],
 }
 
-export type Dialect = {
-    exec: (query: string) => Promise<unknown>;
-    render: (query: ResolvedQuery) => string;
+export type Broker = {
+    exec: <P extends QueryParametersBase>(query: RenderedQuery<P>, params: ParamsFor<P>) => Promise<unknown>;
+    render: <P extends QueryParametersBase>(query: ResolvedQuery<P>) => RenderedQuery<P>;
     // quote: (s: string) => RenderedExpression,
     // conditional: (cases: {predicate: RenderedExpression, result: RenderedExpression}[], otherwise: RenderedExpression) => RenderedExpression,
     embed?: (rs: RelaxedSchema) => Schema,
 };
 
-export type ResolvedQuery = {};
+export type ResolvedQuery<P extends QueryParametersBase> = {
+    instances: {relation: string, constraints: Constraint[]}[],
+    query: Query<P>
+};
 
-export type Query =
-    | {[All]: QueryShape, order?: Expr[]}
-    | {[One]: QueryShape, order?: Expr[]}
-    | {[Some]: QueryShape, order?: Expr[]}
+export type RenderedQuery<P extends QueryParametersBase> = {
+    rendered: string,
+    params: P
+};
+
+export type QueryHost<P extends QueryParametersBase, T> = {
+    exec: keyof P extends never ?
+        (() => Promise<T>) :
+        ((params: P) => Promise<T>),
+};
+
+export type QueryParametersBase = {[Prop in string]: string};
+
+export type ParamsFor<P extends QueryParametersBase> = {
+    [K in keyof P]: ParamFor<P[K]>
+}
+
+export type ParamFor<S extends string> =
+    S extends 'text' ? string :
+    S extends 'int' ? number | bigint :
+    S extends 'real' ? number | bigint :
+    S extends 'dec' ? {value: bigint, decimals: number} :
+    S extends 'date' ? Date :
+    never
 ;
 
-export const All = Symbol('all');
-export const One = Symbol('one');
-export const Some = Symbol('some');
+export type Query<P extends QueryParametersBase> = QueryShape<P>
+    // | ['all', QueryShape<P>]
+    // | ['one', QueryShape<P>]
+    // | ['some', QueryShape<P>]
+;
 
-export type QueryShape = Record<string, Query | Expr | RelationRef>
+export type QueryShape<P extends QueryParametersBase> = {
+    [Prop in string]:
+        // | Query<P>
+        | Expr
+        // | RelationRef
+};
 
 export type Ops = (typeof createOps) extends (where: (...b: BExpr[]) => void) => infer R ? R : never;
 
@@ -136,9 +194,29 @@ const baseOps = {
     power: (base: NExpr, power: NExpr) => ({base, pow: power}),
 
     // aggregations
+    count: (over: Expr) => ({count: over}),
     sum: (over: NExpr) => ({sum: over}),
     product: (over: NExpr) => ({product: over}),
     average: (over: NExpr) => ({average: over}),
+
+    // string operations
+    left: (len: NExpr, subject: SExpr) => ({left: subject, len}),
+    right: (len: NExpr, subject: SExpr) => ({right: subject, len}),
+    slice: (from: NExpr, to: NExpr, subject: SExpr) => ({slice: subject, from, to}),
+    join: (sep: SExpr, ...parts: SExpr[]) => ({join: parts, sep}),
+
+    // parameters
+    param: {
+        text: (paramName: string) => ({textParam: paramName}),
+        int: (paramName: string) => ({intParam: paramName}),
+        date: (paramName: string) => ({dateParam: paramName}),
+        real: (paramName: string) => ({realParam: paramName}),
+        dec: (paramName: string) => ({decParam: paramName}),
+        bool: (paramName: string) => ({boolParam: paramName}),
+    },
+
+    // input data
+    input: (name: string, spec: Record<string, string>) => ({input: name, spec}),
 
     // comparisons
     is: (a: Expr) => ({
@@ -149,7 +227,7 @@ const baseOps = {
     }),
 } as const;
 
-const createOps = (where: (...b: BExpr[]) => void) => ({where, ...baseOps});
+const createOps = () => baseOps;
 
 // expressions
 export type Expr = {free: string}
@@ -166,6 +244,9 @@ export type NExpr =
     | {product: NExpr}
     | {average: NExpr}
     | {base: NExpr, pow: NExpr}
+    | {intParam: string}
+    | {realParam: string}
+    | {decParam: string}
 ;
 
 // string expression
@@ -176,6 +257,8 @@ export type SExpr =
     | {left: SExpr, len: NExpr}
     | {right: SExpr, len: NExpr}
     | {slice: SExpr, from?: NExpr, to?: NExpr}
+    | {join: SExpr[], sep: SExpr}
+    | {textParam: string}
 ;
 
 // numeric expression
@@ -190,17 +273,83 @@ export type BExpr =
     | {is: Expr, in: FieldRef | Expr[]}
     | {is: Expr, notIn: FieldRef | Expr[]}
     | {is: SExpr, like: SExpr}
+    | {boolParam: string}
 ;
 
 // numeric expression
-export type DExpr = Date;
+export type DExpr =
+    | Date
+    | {dateParam: string}
+;
 
 // aggregate expression
 export type AggExpr = never;
 
 export type RenderedExpression = string;
 
-export type Quill = <T>(parser: Parser<T>, queryBuilder: (r: RelationSource, ops: Ops) => Query) => Promise<T>;
+export type QueryBuilderTools = {
+    s: RelationSource,
+    ops: Ops,
+    where: (...conditions: BExpr[]) => void,
+};
+
+export type Quill = <T, P extends QueryParametersBase>(parser: Parser<T>, queryBuilder: (tools: QueryBuilderTools) => Query<P>) => QueryHost<P,T>;
 export type Parser<T> =
     | ((u: unknown) => T)
     | {parse: (u: unknown) => T}
+;
+
+export type SQLDialect = {
+    quote: (identifier: string) => string,
+    str: (string: string) => string,
+    cast: (typename: string, val: string) => string,
+    concat: (...vals: string[]) => string,
+    textType: string,
+}
+
+export const createSQLRenderer = (sd: SQLDialect, schema: Schema): (<P extends QueryParametersBase>(rq: ResolvedQuery<P>) => string) => {
+    const {quote: q, str} = sd;
+
+    return (rq) => {
+        const {instances, query} = rq;
+
+        const relations = instances.map(i => schema.relations[i.relation]);
+
+        const terms = flow(query, rec.aMap((term, name) => {
+            const expr = renderSQLExpr(relations, sd, term);
+            return `${expr} as ${q(name)}`
+        }))
+
+        return hstr.render('  ')([
+            'SELECT', hstr.separate(',')(terms),
+        ])
+    }
+}
+
+function renderSQLExpr(relations: Relation[], sd: SQLDialect, e: Expr): string {
+    if (is.string(e))
+        return sd.str(e);
+    else if (is.number(e))
+        return String(e);
+    else if (is.boolean(e))
+        return String(e);
+    else if (is.date(e))
+        return e.toISOString();
+    
+    return match(e, {
+        free: (s) => s.free,
+        instance: (fr) => {
+            const relname = sd.quote(`R${fr.instance}`);
+            const fieldEmbedding = relations[fr.instance].fields[fr.field].embedding;
+            const fieldType = relations[fr.instance].fields[fr.field].type;
+
+            if (is.array(fieldEmbedding)) {
+                const renderedFields = fieldEmbedding.map(f => sd.cast(sd.textType, `${relname}.${sd.quote(f)}`));
+                return sd.concat(...renderedFields);
+            } else {
+                return `${relname}.${fieldEmbedding}`;
+            }
+        },
+        add: (ne) => 
+    });
+}
