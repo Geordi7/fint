@@ -1,7 +1,7 @@
 
-import { assert, identity } from './misc';
+import { assert } from './misc';
 import { flow } from './pipes';
-import { is, KeysAcrossUnion, Maybe, PrettyIntersection, PropsAcrossUnion, Scalar, Tree } from './types';
+import { HStr, is, KeysAcrossUnion, Maybe, PrettyIntersection, PropsAcrossUnion, Scalar, Tree, tuple } from './types';
 
 export const inspect = <V>(fn: (v: V) => unknown) => <U extends V>(v: U): U => (fn(v), v);
 
@@ -11,11 +11,38 @@ export const rec = ({
     e: Object.entries as <K extends string, V>(r: Record<K, V>) => [K, V][],
     f: Object.fromEntries as <K extends string, V>(a: Iterable<[K, V]>) => Record<K,V>,
 
+    // iterate entries
+    ie: function*<K extends string, V>(r: Record<K,V>): IterableIterator<[K,V]> {
+        for (const k in r) {
+            if (r.hasOwnProperty(k)) yield tuple(k, r[k]);
+        }
+    },
+
+    // iterate keys
+    ik: function*<K extends string, V>(r: Record<K,V>): IterableIterator<K> {
+        for (const k in r) {
+            if (r.hasOwnProperty(k)) yield k;
+        }
+    },
+
+    // iterate values
+    iv: function*<K extends string, V>(r: Record<K,V>): IterableIterator<V> {
+        for (const k in r) {
+            if (r.hasOwnProperty(k)) yield r[k];
+        }
+    },
+
     // point-free tools
 
     map: <V, U, K extends string>(fn: (v: V, k: K) => U) =>
         (record: Record<K,V>): Record<K,U> =>
             rec.e(record).reduce((l, [k,v]) => (l[k] = fn(v,k), l), {} as Record<K,U>),
+
+    aMap: <V, U, K extends string>(fn: (v: V, k: K) => U) =>
+        (record: Record<K,V>): U[] => rec.e(record).map(([k,v]) => fn(v,k)),
+
+    iMap: <V, U, K extends string>(fn: (v: V, k: K) => U) =>
+        function*(record: Record<K,V>) {for(const [k,v] of rec.ie(record)) yield fn(v,k);},
 
     filter: (<V, K extends string>(fn: (v: V, k: K) => boolean) =>
         (record: Record<K,V>): Record<K,V> =>
@@ -26,9 +53,23 @@ export const rec = ({
     reduce: <V, U, K extends string>(u: U, fn: (u: U, v: V, k: K) => U) =>
         (record: Record<K, V>): U => rec.e(record).reduce((u, [k,v]) => fn(u,v,k), u),
 
-    inspect: <V>(fn: (v: V) => void) =>
+    visit: <V, U>(fn: (visit: (node: Record<string, U>) => void, u: U, k: string) => V | V[]) => (r: Record<string,U>) => {
+        const out = [] as (V | V[])[];
+        const visited = new WeakSet<any>();
+        const visit = (node: Record<string, U>) => {
+            if (visited.has(node)) return;
+            visited.add(node);
+            for (const [k,u] of rec.ie(r)) {
+                out.push(fn(visit, u,k));
+            }
+        };
+        visit(r);
+        return out.flat() as V[];
+    },
+
+    inspect: <V, K extends string>(fn: (v: V, k: K) => void) =>
         <R extends Record<string,V>> (record: R): R =>
-            (rec.v(record).forEach(fn), record),
+            (rec.iMap(fn)(record), record),
 
     every: <V, K extends string>(fn: (v: V, k: K) => boolean) => (record: Record<K,V>): boolean => {
         for (const [k,v] of rec.e(record)) {
@@ -95,7 +136,7 @@ export const arr = {
             iter.collect) as any[],
 
     flatten: <V>(array: V[][]): V[] =>
-        array.flatMap(identity),
+        array.flat(1),
 
     squash: <V>(array: DeepArray<V>): V[] =>
         [...iter.deep(array as DeepIter<V>)],
@@ -158,6 +199,61 @@ export const arr = {
 
             layer = top;
         }
+    },
+
+    // DFS capable array expansion
+    // each element is replaced by the results of fn
+    // then iteration continues from the next item that has not been considered
+    knit: <A>(fn: (v: A, i: number, scarf: ReadonlyArray<A>) => A[]) => (array: A[]): A[] => {
+        const output = [...array];
+
+        let i = 0;
+        while (i < output.length) {
+            const v = output[i];
+            const items = fn(v, i, output);
+
+            if (items.length === 0) {
+                output.splice(i, 1);
+            } else {
+                output.splice(i, 1, ...items);
+                
+                if (items[0] === v || Object.is(items[0], v)) {
+                    i++;
+                }
+            }
+        }
+
+        return output;
+    },
+
+    // not-quite DFS capable array expansion
+    inflate: <A>(fn: (v: A, i: number, balloon: ReadonlyArray<A>) => A[]) => (array: A[]): A[] => {
+        const output = [...array];
+
+        let i = 0;
+        while (i < output.length) {
+            if (i + 1 === output.length)
+                output.push(...fn(output[i], i, output));
+            else
+                output.splice(i + 1, 0, ...fn(output[i], i, output));
+            i++;
+        }
+        
+        return output;
+    },
+
+    // BFS style array expansion
+    // no intrinsic duplicate checking!
+    unroll: <A>(fn: (v: A, i: number, carpet: ReadonlyArray<A>) => A[]) => (array: A[]): A[] => {
+        const output = [...array];
+
+        let i = 0;
+        while (i < output.length) {
+            output.push(...fn(output[i], i, output));
+            i++;
+        }
+        
+        return output;
     },
 };
 
@@ -570,4 +666,63 @@ export const tree = {
 
         return (tree: Tree<V>) => pfn(tree) as Tree<V> | undefined;
     }
+}
+
+export const hstr = {
+    render: (indent: string = '  ') => (hs: HStr) => {
+        return _renderHStr(hs, indent, '').join('\n');
+    },
+
+    // sometimes, you need to separate each item at a particular layer with a separator,
+    // but you don't want a trailing separator. This is really annoying to accomplish
+    // so use this function
+    separate: (sep: string) => (hs: HStr) => {
+        return hs.map((s,i) => {
+            if (i + 1 < hs.length) {
+                if (is.array(s))
+                    return hstr.end(sep)(s);
+                else
+                    return s + sep;
+            } else {
+                return s
+            }
+        });
+    },
+
+    // recursively find the end of a hierarchical string, and add postfix to it
+    end: (postfix: string) => (hs: HStr): HStr => {
+        if (hs.length === 0)
+            return [postfix];
+
+        const r = [...hs];
+        const at = r.at(-1);
+
+        if (is.array(at)) {
+            r[r.length - 1] = hstr.end(postfix)(at);
+        } else if (is.string(at)) {
+            r[r.length - 1] += postfix;
+        }
+
+        return r;
+    },
+
+    endings: (postfix: string) => (hs: HStr): HStr => {
+        return hs.map(s => (is.array(s)) ?
+            hstr.end(postfix)(s) :
+            s + postfix
+        );
+    },
+}
+
+function _renderHStr(hs: HStr, indent: string, prefix: string) {
+    const lines = [] as string[];
+    for (const s of hs) {
+        if (is.array(s)) {
+            lines.push(..._renderHStr(s, indent, indent + prefix));
+        } else {
+            lines.push(prefix + s);
+        }
+    }
+
+    return lines;
 }

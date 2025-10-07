@@ -17,7 +17,7 @@
 //      r.isErr() -- to check if its Err
 //      r.err() -- to get the err value or throw an exception
 
-import { is, MaybePromise } from "./types";
+import { is } from "./types";
 
 export type Result<R,E> = IResult<R,E>;
 export type PResult<R,E> = Promise<Result<R,E>>;
@@ -34,7 +34,9 @@ export const Result = {
 
     // wrap a function that can raise an exception
     // create a function which captures success in Ok and exceptions in Err
-    lift: (<V extends unknown[], R>(fn: (...v: V) => MaybePromise<R>) => (...v: V): MaybePromise<Result<R,Error>> => {
+    lift:
+    (<V extends unknown[], R>(fn: (...v: V) => R) =>
+    (...v: V): unknown => {
         try {
             const r = fn(...v);
             if (is.promise(r)) {
@@ -82,17 +84,32 @@ export const Result = {
         }
 
         return r;
-    }
+    },
+
+    all: <R,E>(i: Iterable<Result<R,E>>): Result<R[], E[]> => {
+        const {ok,err} = Result.collect(i);
+
+        return (err.length > 0) ? Err(err) : Ok(ok);
+    },
+
+    any: <R,E>(i: Iterable<Result<R,E>>): Result<R[], E[]> => {
+        const {ok,err} = Result.collect(i);
+
+        return (ok.length > 0) ? Ok(ok) : Err(err);
+    },
 
 } satisfies 
+    // I want this because it guarantees all the point free ops are included
+    & {[K in keyof IResult<unknown, unknown>]: unknown}
     & {
         Ok: unknown,
         Err: unknown,
         lift: unknown,
-        capture: unknown
-        collect: unknown
+        capture: unknown,
+        collect: unknown,
+        all: unknown,
+        any: unknown,
     }
-    & {[K in keyof IResult<unknown, unknown>]: unknown}
 ;
 
 export class ResultOk<R0> implements IResult<R0,never> {
